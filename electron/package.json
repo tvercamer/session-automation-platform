@@ -5,7 +5,8 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
-    "start": "tsc && electron ."
+    "start": "electron .",
+    "dev": "tsc && electron ."
   },
   "keywords": [],
   "author": "",

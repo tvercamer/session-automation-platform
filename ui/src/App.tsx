@@ -1,54 +1,12 @@
-import {useState, useEffect} from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Button } from 'primereact/button';
 
-function App() {
-    const [data, setData] = useState<string>('Loading...')
-    const [count, setCount] = useState(0)
-
-    useEffect(() => {
-        fetch('http://127.0.0.1:8000/')
-            .then(response => response.json())
-            .then(result => {
-                console.log('Backend response:', result)
-                setData(result.message)
-            })
-            .catch(error => {
-                console.error('Error connecting to backend:', error)
-                setData('Error connecting to backend')
-            })
-    }, [])
-
+export default function App() {
     return (
-        <>
-            <div>
-                <a href="https://vite.dev" target="_blank">
-                    <img src={viteLogo} className="logo" alt="Vite logo"/>
-                </a>
-                <a href="https://react.dev" target="_blank">
-                    <img src={reactLogo} className="logo react" alt="React logo"/>
-                </a>
+        <div className="surface-ground h-screen flex align-items-center justify-content-center">
+            <div className="surface-card p-5 shadow-2 border-round">
+                <h1 className="text-white">Theme Test</h1>
+                <Button label="PrimeReact is Working" icon="pi pi-check" />
             </div>
-            <h1>Vite + React + Electron</h1>
-            <div className="card">
-                <button onClick={() => setCount((count) => count + 1)}>
-                    count is {count}
-                </button>
-                <p>
-                    Edit <code>src/App.tsx</code> and save to test HMR
-                </p>
-            </div>
-            <p className="read-the-docs">
-                Click on the Vite and React logos to learn more
-            </p>
-
-            <div style={{ padding: '20px' }}>
-                <h1>Electron + React + Python</h1>
-                <p>Status: <strong>{data}</strong></p>
-            </div>
-        </>
+        </div>
     )
 }
-
-export default App

@@ -6,7 +6,7 @@ import type { MenuItem } from 'primereact/menuitem';
 
 import ConfigurationPanel from './components/ConfigurationPanel';
 import LibraryPanel from './components/LibraryPanel';
-import PlaylistPanel from './components/PlaylistPanel';
+import PlaylistPanel from './components/PlaylistPanel/PlaylistPanel.tsx';
 import ConsolePanel from './components/ConsolePanel';
 
 // Define the types locally so App knows the structure

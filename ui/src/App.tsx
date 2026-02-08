@@ -1,67 +1,23 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { TreeNode } from 'primereact/treenode';
-import { Menubar } from 'primereact/menubar';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
-import type { MenuItem } from 'primereact/menuitem';
-
+import { Toast } from 'primereact/toast';
+import AppMenu from "./components/AppMenu.tsx";
 import ConfigurationPanel from './components/ConfigurationPanel';
 import LibraryPanel from './components/LibraryPanel';
 import PlaylistPanel from './components/PlaylistPanel/PlaylistPanel.tsx';
 import ConsolePanel from './components/ConsolePanel';
-
-// Define the types locally so App knows the structure
-export interface FileItem {
-    id: string;
-    name: string;
-    type: 'file';
-    fileType: string;
-}
-
-export interface Section {
-    id: string;
-    title: string;
-    isLocked: boolean;
-    items: FileItem[];
-}
+import type { Section } from "./types/session.ts";
 
 export default function App() {
+    const toast = useRef<Toast>(null);
+
     // --- STATE MANAGEMENT ---
     const [sessionName, setSessionName] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default +14 days
     const [selectedIndustry, setSelectedIndustry] = useState(null);
     const [selectedLanguage, setSelectedLanguage] = useState(null);
-
-    // --- MENU ---
-    const menuItems: MenuItem[] = [
-        { label: 'File', items: [{ label: 'New' }, { label: 'Open' }, { label: 'Exit' }] },
-        { label: 'Edit', items: [{ label: 'Undo' }, { label: 'Redo' }] },
-        { label: 'View', items: [{ label: 'Toggle Console' }] },
-        { label: 'Settings', icon: 'pi pi-cog' },
-        { label: 'Help' }
-    ];
-
-    // --- LIBRARY DATA ---
-    // Note: No icons here, so the LibraryPanel template handles the folder/file icons dynamically
-    const [treeNodes] = useState<TreeNode[]>([
-        {
-            key: '0',
-            label: 'Topics',
-            children: [
-                { key: '0-0', label: 'Introduction' },
-                { key: '0-1', label: 'Market Overview' }
-            ]
-        },
-        {
-            key: '1',
-            label: 'Templates',
-            children: [
-                { key: '1-0', label: 'Images.ppt' }
-            ]
-        }
-    ]);
-
-    // --- PLAYLIST STATE (New Nested Structure) ---
     const [sections, setSections] = useState<Section[]>([
         {
             id: 'intro',
@@ -86,16 +42,68 @@ export default function App() {
             ]
         },
         {
-            id: 'concl',
-            title: 'Conclusion',
+            id: 'outro',
+            title: 'Outro',
             isLocked: true,
             items: [] // Empty locked end
         }
     ]);
+    const [treeNodes] = useState<TreeNode[]>([
+        {
+            key: '0',
+            label: 'Topics',
+            children: [
+                { key: '0-0', label: 'Introduction' },
+                { key: '0-1', label: 'Market Overview' }
+            ]
+        },
+        {
+            key: '1',
+            label: 'Templates',
+            children: [
+                { key: '1-0', label: 'Images.ppt' }
+            ]
+        }
+    ]);
 
+    // --- ACTIONS ---
+    const handleSettings = () => {
+        toast.current?.show({ severity: 'info', summary: 'Settings', detail: 'Settings dialog would open here.' });
+    };
+
+    const handleQuit = () => {
+        window.electronAPI.quitApp();
+    };
+
+    const handleFullScreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then();
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().then();
+            }
+        }
+    };
+
+    const handleToggleDev = () => {
+        window.electronAPI.toggleDevTools();
+    };
+
+    const handleHelp = () => {
+        window.electronAPI.help();
+    }
+
+    // --- RENDER ---
     return (
-        <div className="flex flex-column h-screen overflow-hidden text-white">
-            <Menubar model={menuItems} />
+        <div className='flex flex-column h-screen overflow-hidden text-white'>
+            <Toast ref={toast} />
+            <AppMenu
+                onSettings={handleSettings}
+                onQuit={handleQuit}
+                onFullScreen={handleFullScreen}
+                onToggleDev={handleToggleDev}
+                onHelp={handleHelp}
+            />
 
             <div className="flex-grow-1 overflow-hidden p-2">
                 <Splitter
@@ -118,7 +126,6 @@ export default function App() {
                     </SplitterPanel>
 
                     <SplitterPanel size={40} minSize={20} className="flex overflow-hidden border-round-sm">
-                        {/* Updated to pass sections instead of flat items */}
                         <PlaylistPanel sections={sections} setSections={setSections} />
                     </SplitterPanel>
 

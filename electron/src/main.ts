@@ -3,7 +3,7 @@ process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 // Imports
 import { spawn, ChildProcess } from 'child_process'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import * as path from 'path'
 import * as url from 'url'
 
@@ -31,9 +31,9 @@ function createMainWindow() {
         height: 800,
         autoHideMenuBar: true, // Will be replaced by a custom menu in the React frontend
         webPreferences: {
-            // TODO: switch to preload + contextIsolation: true later
-            nodeIntegration: true,
-            contextIsolation: false,
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
         },
     })
     mainBrowserWindow.setMenu(null); // Also hides the menu when holding the ALT key
@@ -115,3 +115,15 @@ app.whenReady().then(() => {
         if (process.platform !== 'darwin') app.quit();
     });
 })
+
+ipcMain.on('app-quit', () => {
+    app.quit();
+})
+
+ipcMain.on('toggle-dev-tools', () => {
+    if(mainBrowserWindow) mainBrowserWindow.webContents.toggleDevTools();
+});
+
+ipcMain.on('help', () => {
+    shell.openExternal('https://google.com?q=project-help-page');
+});

@@ -29,13 +29,15 @@ function createMainWindow() {
     mainBrowserWindow = new BrowserWindow({
         width: 1200,
         height: 800,
+        autoHideMenuBar: true, // Will be replaced by a custom menu in the React frontend
         webPreferences: {
             // TODO: switch to preload + contextIsolation: true later
             nodeIntegration: true,
             contextIsolation: false,
         },
     })
-    mainBrowserWindow.loadURL(startURL).then()
+    mainBrowserWindow.setMenu(null); // Also hides the menu when holding the ALT key
+    mainBrowserWindow.loadURL(startURL).then();
 
     // Handle browser window closed
     mainBrowserWindow.on('closed', () => {

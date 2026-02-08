@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import type { TreeNode } from 'primereact/treenode';
+import { Menubar } from 'primereact/menubar';
+import { Splitter, SplitterPanel } from 'primereact/splitter';
+import type { MenuItem } from 'primereact/menuitem';
 import ConfigurationPanel from './components/ConfigurationPanel';
 import LibraryPanel from './components/LibraryPanel';
 import PlaylistPanel from './components/PlaylistPanel';
@@ -9,68 +12,79 @@ export default function App() {
     // --- STATE MANAGEMENT ---
     const [sessionName, setSessionName] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState(null);
-    const [date, setDate] = useState<Date | null | undefined>(null);
+    const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default to 2 weeks from now
     const [selectedIndustry, setSelectedIndustry] = useState(null);
     const [selectedLanguage, setSelectedLanguage] = useState(null);
 
-    // Dummy Library Data
+    // --- MENU ---
+    const menuItems: MenuItem[] = [
+        { label: 'File', items: [{ label: 'New' }, { label: 'Open' }, { label: 'Exit' }] },
+        { label: 'Edit', items: [{ label: 'Undo' }, { label: 'Redo' }] },
+        { label: 'View', items: [{ label: 'Toggle Console' }] },
+        { label: 'Settings', icon: 'pi pi-cog' },
+        { label: 'Help' }
+    ];
+
+    // --- DUMMY LIBRARY DATA ---
     const [treeNodes] = useState<TreeNode[]>([
         {
             key: '0',
             label: 'Topics',
             children: [
-                { key: '0-0', label: 'Introduction', icon: 'pi pi-fw pi-folder' },
-                {
-                    key: '0-1',
-                    label: 'Case Studies',
-                    icon: 'pi pi-fw pi-folder',
-                    children: [
-                        { key: '0-1-0', label: 'Intro Case 1', icon: 'pi pi-fw pi-file' },
-                        { key: '0-1-1', label: 'Market Overview', icon: 'pi pi-fw pi-file' }
-                    ]
-                }
+                { key: '0-0', label: 'Introduction' },
+                { key: '0-1', label: 'Market Overview' }
             ]
         },
         {
             key: '1',
             label: 'Templates',
             children: [
-                { key: '1-0', label: 'Images.ppt', icon: 'pi pi-fw pi-image' }
+                { key: '1-0', label: 'Images.ppt' }
             ]
         }
     ]);
 
-    // Dummy Playlist Data
     const [playlist, setPlaylist] = useState([
-        { id: '1', name: 'Introduction' },
-        { id: '2', name: 'Market Overview' },
-        { id: '3', name: 'Financials' },
-        { id: '4', name: 'Conclusion' }
+        { id: '1', name: 'Introduction', type: 'section' },
+        { id: '2', name: 'Market Overview', type: 'section' },
+        { id: '3', name: 'Competitor_Analysis.docx', type: 'file', fileType: 'word' },
+        { id: '4', name: 'Financials', type: 'section' },
+        { id: '5', name: 'Budget_Template.xlsx', type: 'file', fileType: 'excel' },
+        { id: '6', name: 'Conclusion', type: 'section' }
     ]);
 
     return (
-        <div className="flex flex-column h-screen p-2 gap-2 surface-ground text-white">
-            <div className="flex flex-grow-1 gap-2 overflow-hidden">
-                <ConfigurationPanel
-                    sessionName={sessionName}
-                    setSessionName={setSessionName}
-                    selectedCustomer={selectedCustomer}
-                    setSelectedCustomer={setSelectedCustomer}
-                    date={date}
-                    setDate={setDate}
-                    selectedIndustry={selectedIndustry}
-                    setSelectedIndustry={setSelectedIndustry}
-                    selectedLanguage={selectedLanguage}
-                    setSelectedLanguage={setSelectedLanguage}
-                />
+        <div className="flex flex-column h-screen overflow-hidden text-white">
+            <Menubar model={menuItems} />
 
-                <LibraryPanel nodes={treeNodes} />
+            <div className="flex-grow-1 overflow-hidden p-2">
+                <Splitter
+                    style={{ height: '100%', border: 'none', background: 'transparent' }}
+                    gutterSize={8}
+                >
 
-                <PlaylistPanel items={playlist} setItems={setPlaylist} />
+                    <SplitterPanel size={25} minSize={20} className="flex overflow-hidden border-round-sm">
+                        <ConfigurationPanel
+                            sessionName={sessionName} setSessionName={setSessionName}
+                            selectedCustomer={selectedCustomer} setSelectedCustomer={setSelectedCustomer}
+                            date={date} setDate={setDate}
+                            selectedIndustry={selectedIndustry} setSelectedIndustry={setSelectedIndustry}
+                            selectedLanguage={selectedLanguage} setSelectedLanguage={setSelectedLanguage}
+                        />
+                    </SplitterPanel>
+
+                    <SplitterPanel size={35} minSize={20} className="flex overflow-hidden border-round-sm">
+                        <LibraryPanel nodes={treeNodes} />
+                    </SplitterPanel>
+
+                    <SplitterPanel size={40} minSize={20} className="flex overflow-hidden border-round-sm">
+                        <PlaylistPanel items={playlist} setItems={setPlaylist} />
+                    </SplitterPanel>
+
+                </Splitter>
             </div>
 
             <ConsolePanel />
-
         </div>
     );
 }

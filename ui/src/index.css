@@ -75,3 +75,50 @@ html, body, #root {
 .p-orderlist .p-orderlist-list { padding: 0 !important; border: none !important; background: transparent !important; }
 .p-orderlist-item { background: transparent !important; color: inherit !important; padding: 0 !important; }
 .p-orderlist-item.p-highlight { background: transparent !important; color: inherit !important; }
+
+/* 5. SESSION PLAYLIST STYLING */
+
+/* Container for the dot - provides spacing but isn't clickable itself */
+.section-separator {
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.25rem 0;
+  pointer-events: none; /* The gap itself ignores clicks */
+}
+
+/* The actual dot - Clickable and Visible */
+.section-separator .dot {
+  width: 8px;
+  height: 8px;
+  background-color: #52525b; /* Visible Gray by default */
+  border-radius: 50%;
+  transition: transform 0.2s, background-color 0.2s;
+  cursor: pointer;
+  pointer-events: auto; /* Re-enable clicks on the dot */
+}
+
+.section-separator .dot:hover {
+  transform: scale(1.5);
+  background-color: #60a5fa; /* Blue on hover */
+}
+
+/* Section Containers */
+.session-section {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  transition: border-color 0.2s;
+}
+
+.session-section.drag-over {
+  border-color: #60a5fa;
+  background-color: rgba(96, 165, 250, 0.1);
+}
+
+.session-section.locked {
+  border-style: dashed;
+  border-color: #3f3f46;
+}

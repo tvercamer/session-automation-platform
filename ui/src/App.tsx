@@ -3,16 +3,32 @@ import type { TreeNode } from 'primereact/treenode';
 import { Menubar } from 'primereact/menubar';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
 import type { MenuItem } from 'primereact/menuitem';
+
 import ConfigurationPanel from './components/ConfigurationPanel';
 import LibraryPanel from './components/LibraryPanel';
 import PlaylistPanel from './components/PlaylistPanel';
 import ConsolePanel from './components/ConsolePanel';
 
+// Define the types locally so App knows the structure
+export interface FileItem {
+    id: string;
+    name: string;
+    type: 'file';
+    fileType: string;
+}
+
+export interface Section {
+    id: string;
+    title: string;
+    isLocked: boolean;
+    items: FileItem[];
+}
+
 export default function App() {
     // --- STATE MANAGEMENT ---
     const [sessionName, setSessionName] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState(null);
-    const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default to 2 weeks from now
+    const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default +14 days
     const [selectedIndustry, setSelectedIndustry] = useState(null);
     const [selectedLanguage, setSelectedLanguage] = useState(null);
 
@@ -25,7 +41,8 @@ export default function App() {
         { label: 'Help' }
     ];
 
-    // --- DUMMY LIBRARY DATA ---
+    // --- LIBRARY DATA ---
+    // Note: No icons here, so the LibraryPanel template handles the folder/file icons dynamically
     const [treeNodes] = useState<TreeNode[]>([
         {
             key: '0',
@@ -44,13 +61,36 @@ export default function App() {
         }
     ]);
 
-    const [playlist, setPlaylist] = useState([
-        { id: '1', name: 'Introduction', type: 'section' },
-        { id: '2', name: 'Market Overview', type: 'section' },
-        { id: '3', name: 'Competitor_Analysis.docx', type: 'file', fileType: 'word' },
-        { id: '4', name: 'Financials', type: 'section' },
-        { id: '5', name: 'Budget_Template.xlsx', type: 'file', fileType: 'excel' },
-        { id: '6', name: 'Conclusion', type: 'section' }
+    // --- PLAYLIST STATE (New Nested Structure) ---
+    const [sections, setSections] = useState<Section[]>([
+        {
+            id: 'intro',
+            title: 'Introduction',
+            isLocked: true,
+            items: [] // Empty locked start
+        },
+        {
+            id: 'sec1',
+            title: 'Market Overview',
+            isLocked: false,
+            items: [
+                { id: 'f1', name: 'Competitor_Analysis.docx', type: 'file', fileType: 'word' }
+            ]
+        },
+        {
+            id: 'sec2',
+            title: 'Financials',
+            isLocked: false,
+            items: [
+                { id: 'f2', name: 'Budget_Template.xlsx', type: 'file', fileType: 'excel' }
+            ]
+        },
+        {
+            id: 'concl',
+            title: 'Conclusion',
+            isLocked: true,
+            items: [] // Empty locked end
+        }
     ]);
 
     return (
@@ -78,7 +118,8 @@ export default function App() {
                     </SplitterPanel>
 
                     <SplitterPanel size={40} minSize={20} className="flex overflow-hidden border-round-sm">
-                        <PlaylistPanel items={playlist} setItems={setPlaylist} />
+                        {/* Updated to pass sections instead of flat items */}
+                        <PlaylistPanel sections={sections} setSections={setSections} />
                     </SplitterPanel>
 
                 </Splitter>

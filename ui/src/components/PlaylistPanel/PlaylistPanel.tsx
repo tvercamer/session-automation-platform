@@ -56,7 +56,7 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
         };
 
         const updated = [...sections];
-        let realIndex = updated.length - 1; // Default before Outro
+        let realIndex = updated.length - 1;
 
         if (index === 0) {
             const introIdx = updated.findIndex(s => s.id === 'intro' || s.title === 'Introduction');
@@ -117,6 +117,7 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
             const sectionElement = dropTarget?.closest('[data-section-id]');
             const targetSectionId = sectionElement?.getAttribute('data-section-id');
 
+            // Simplified: No language/industry args needed
             const resolvedFiles = await window.electronAPI.resolveDrop(droppedPath);
 
             if (!resolvedFiles || resolvedFiles.length === 0) {
@@ -207,6 +208,7 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
             <Toast ref={toast} />
             <ConfirmPopup />
 
+            {/* HEADER */}
             <div className="flex align-items-center justify-content-between p-2 px-3 bg-header" style={{ height: '3rem' }}>
                 <span className="font-bold text-sm text-gray-200">Session</span>
                 <div className="flex gap-2">
@@ -215,6 +217,7 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
                 </div>
             </div>
 
+            {/* LIST AREA */}
             <div className="flex-grow-1 overflow-y-auto p-3 custom-scrollbar">
 
                 {/* FIXED INTRO */}
@@ -277,6 +280,24 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
                     <i className="pi pi-lock mr-2 text-xs"></i>
                     <span className="font-bold text-sm">Outro</span>
                 </div>
+            </div>
+
+            {/* FOOTER: Actions */}
+            <div className="p-3 border-top-1 surface-border bg-gray-900 flex gap-2">
+                <Button
+                    label="Generate Session"
+                    icon="pi pi-cog"
+                    className="flex-1 p-button-primary"
+                    onClick={() => console.log('Generate clicked')}
+                />
+
+                <Button
+                    disabled={true}
+                    label="Preview Files"
+                    icon="pi pi-folder-open"
+                    className="flex-1 p-button-outlined p-button-secondary"
+                    onClick={() => console.log('Preview clicked')}
+                />
             </div>
         </div>
     );

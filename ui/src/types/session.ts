@@ -11,3 +11,11 @@ export interface Section {
     isLocked: boolean;
     items: FileItem[];
 }
+
+export interface SessionSettings {
+    sessionName: string;
+    customer: string;
+    date: Date;
+    industry: string;
+    language: string;
+}

@@ -2,7 +2,6 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from 'primereact/button';
 import type { FileItem } from '../../types/session';
-import { getFileIcon } from '../../utils/icons';
 
 interface SortableFileItemProps {
     item: FileItem;
@@ -26,35 +25,36 @@ export function SortableFileItem({ item, onDelete, isLocked }: SortableFileItemP
         opacity: isDragging ? 0.5 : 1,
     };
 
+    // Helper to get icon based on type (simple version)
+    const getIcon = (type: string) => {
+        if (type.includes('pptx')) return 'pi-file text-orange-500';
+        if (type.includes('docx')) return 'pi-file text-blue-500';
+        if (type.includes('xlsx')) return 'pi-file-excel text-green-500';
+        return 'pi-file text-gray-500';
+    };
+
     return (
         <div
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
-            className="flex align-items-center p-2 surface-card border-1 surface-border border-round hover:surface-hover transition-colors cursor-move mb-2"
+            className="flex align-items-center p-2 surface-card border-1 surface-border border-round mb-2 hover:surface-hover cursor-move transition-colors"
         >
-            {/* Icon Column */}
-            <div className="flex align-items-center justify-content-center w-2rem mr-2">
-                {getFileIcon(item.fileType)}
-            </div>
+            <i className={`pi ${getIcon(item.fileType)} mr-2 text-lg`}></i>
 
-            {/* Text Column */}
             <div className="flex flex-column flex-grow-1 overflow-hidden">
-                <span className="text-gray-500 text-xs uppercase font-bold" style={{ fontSize: '0.6rem' }}>File</span>
-                <span className="font-medium text-sm text-gray-200 white-space-nowrap overflow-hidden text-overflow-ellipsis">
+                <span className="text-gray-200 text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis">
                     {item.name}
                 </span>
             </div>
 
-            {/* Actions Column */}
             {!isLocked && (
                 <Button
                     icon="pi pi-times"
                     rounded text
-                    severity="secondary"
-                    className="h-1rem w-1rem text-gray-600 hover:text-red-400"
-                    onPointerDown={(e) => e.stopPropagation()} // Important: Prevents drag start when clicking delete
+                    className="w-2rem h-2rem text-gray-500 hover:text-red-500"
+                    onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on delete
                     onClick={onDelete}
                 />
             )}

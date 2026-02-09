@@ -1,58 +1,40 @@
+import { handleQuit, handleHelp, handleToggleDev, handleFullScreen } from './utils/electron-bridge.ts';
+import SettingsDialog from "./components/SettingsDialog.tsx";
+import ConsolePanel from './components/ConsolePanel';
 import { useState, useEffect, useRef } from 'react';
 import type { TreeNode } from 'primereact/treenode';
-import { Splitter, SplitterPanel } from 'primereact/splitter';
-import { Toast } from 'primereact/toast';
+import Workspace from "./components/Workspace.tsx";
+import type {Section, SessionSettings} from "./types/session.ts";
 import AppMenu from "./components/AppMenu.tsx";
-import SettingsDialog from "./components/SettingsDialog.tsx";
-import ConfigurationPanel from './components/ConfigurationPanel';
-import LibraryPanel from './components/LibraryPanel';
-import PlaylistPanel from './components/PlaylistPanel/PlaylistPanel.tsx';
-import ConsolePanel from './components/ConsolePanel';
-import type { Section } from "./types/session.ts";
+import { Toast } from 'primereact/toast';
+
 
 export default function App() {
+    /* ------------------------------------------------------------------------------------
+     * STATE MANAGEMENT
+     * --------------------------------------------------------------------------------- */
+
+    // ----- VIEWS
     const toast = useRef<Toast>(null);
-
-    // --- STATE MANAGEMENT ---
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-    const [sessionName, setSessionName] = useState('');
-    const [selectedCustomer, setSelectedCustomer] = useState(null);
-    const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default +14 days
-    const [selectedIndustry, setSelectedIndustry] = useState(null);
-    const [selectedLanguage, setSelectedLanguage] = useState(null);
-    const [sections, setSections] = useState<Section[]>([
-        {
-            id: 'intro',
-            title: 'Introduction',
-            isLocked: true,
-            items: [] // Empty locked start
-        },
-        {
-            id: 'sec1',
-            title: 'Market Overview',
-            isLocked: false,
-            items: [
-                { id: 'f1', name: 'Competitor_Analysis.docx', type: 'file', fileType: 'word' }
-            ]
-        },
-        {
-            id: 'sec2',
-            title: 'Financials',
-            isLocked: false,
-            items: [
-                { id: 'f2', name: 'Budget_Template.xlsx', type: 'file', fileType: 'excel' }
-            ]
-        },
-        {
-            id: 'outro',
-            title: 'Outro',
-            isLocked: true,
-            items: [] // Empty locked end
-        }
-    ]);
+    const handleSettings = () => {
+        setIsSettingsVisible(true);
+    };
 
+    // ----- Session Settings
+    const [sessionSettings, setSessionSettings] = useState({
+        sessionName: '',
+        customer: '',
+        date: new Date(Date.now() + 14*24*60*60*1000), // Default +14 days
+        industry: 'Generic',
+        language: 'EN'
+    });
+    const handleSessionSettingsChange = (field: keyof SessionSettings, value: any) => {
+        setSessionSettings(prev => ({ ...prev, [field]: value }));
+    };
+
+    // ----- Library Settings
     const [libraryNodes, setLibraryNodes] = useState<TreeNode[]>([]);
-
     const loadLibrary = async () => {
         try {
             console.log("Fetching library...");
@@ -65,39 +47,16 @@ export default function App() {
             console.error("Failed to load library", e);
         }
     };
-
     useEffect(() => {
         loadLibrary().then()
     }, [])
 
-    // --- ACTIONS ---
-    const handleSettings = () => {
-        setIsSettingsVisible(true);
-    };
+    // ----- Playlist Settings
+    const [sections, setSections] = useState<Section[]>([]);
 
-    const handleQuit = () => {
-        window.electronAPI.quitApp();
-    };
-
-    const handleFullScreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().then();
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen().then();
-            }
-        }
-    };
-
-    const handleToggleDev = () => {
-        window.electronAPI.toggleDevTools();
-    };
-
-    const handleHelp = () => {
-        window.electronAPI.help();
-    }
-
-    // --- RENDER ---
+    /* ------------------------------------------------------------------------------------
+     * RENDERING
+     * --------------------------------------------------------------------------------- */
     return (
         <div className='flex flex-column h-screen overflow-hidden text-white'>
             <Toast ref={toast} />
@@ -116,32 +75,13 @@ export default function App() {
                 onHelp={handleHelp}
             />
 
-            <div className="flex-grow-1 overflow-hidden p-2">
-                <Splitter
-                    style={{ height: '100%', border: 'none', background: 'transparent' }}
-                    gutterSize={8}
-                >
-
-                    <SplitterPanel size={25} minSize={20} className="flex overflow-hidden border-round-sm">
-                        <ConfigurationPanel
-                            sessionName={sessionName} setSessionName={setSessionName}
-                            selectedCustomer={selectedCustomer} setSelectedCustomer={setSelectedCustomer}
-                            date={date} setDate={setDate}
-                            selectedIndustry={selectedIndustry} setSelectedIndustry={setSelectedIndustry}
-                            selectedLanguage={selectedLanguage} setSelectedLanguage={setSelectedLanguage}
-                        />
-                    </SplitterPanel>
-
-                    <SplitterPanel size={35} minSize={20} className="flex overflow-hidden border-round-sm">
-                        <LibraryPanel nodes={libraryNodes} />
-                    </SplitterPanel>
-
-                    <SplitterPanel size={40} minSize={20} className="flex overflow-hidden border-round-sm">
-                        <PlaylistPanel sections={sections} setSections={setSections} />
-                    </SplitterPanel>
-
-                </Splitter>
-            </div>
+            <Workspace
+                settings={sessionSettings}
+                onSettingChange={handleSessionSettingsChange}
+                libraryNodes={libraryNodes}
+                sections={sections}
+                setSections={setSections}
+            />
 
             <ConsolePanel />
         </div>

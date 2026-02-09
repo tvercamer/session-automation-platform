@@ -10,7 +10,7 @@ declare global {
             getSettings: () => Promise<any>;
             saveSettings: (data: any) => Promise<any>;
             getLibrary: () => Promise<any[]>;
-            resolveDrop: (path: string, language: string) => Promise<any[]>;
+            resolveDrop: (path: string) => Promise<any[]>;
         };
     }
 }

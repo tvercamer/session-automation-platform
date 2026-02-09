@@ -40,7 +40,7 @@ export default function ConsolePanel() {
             </div>
 
             {!isCollapsed && (
-                <div className="flex-grow-1 surface-ground p-2 font-monospace text-sm overflow-y-auto custom-scrollbar" style={{ backgroundColor: '#09090b' }}>
+                <div className="flex-grow-1  p-2 font-monospace text-sm overflow-y-auto custom-scrollbar">
                     {logs.map((log, index) => {
                         const isLast = index === logs.length - 1;
                         return (

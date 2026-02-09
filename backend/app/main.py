@@ -38,8 +38,6 @@ class SettingsModel(BaseModel):
 
 class ResolveRequest(BaseModel):
     path: str
-    language: str = "EN"
-    industry: str = None
 
 # --- ENDPOINTS ---
 
@@ -90,7 +88,7 @@ def get_library():
 
 @app.post("/library/resolve")
 def resolve_drop(req: ResolveRequest):
-    return resolve_dropped_item(req.path, req.language, req.industry)
+    return resolve_dropped_item(req.path)
 
 if __name__ == "__main__":
     port = 8000

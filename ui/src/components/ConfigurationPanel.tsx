@@ -1,28 +1,18 @@
+import type {SessionSettings} from "../types/session.ts";
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
 import { Calendar } from 'primereact/calendar';
 
 interface ConfigurationPanelProps {
-    sessionName: string;
-    setSessionName: (val: string) => void;
-    selectedCustomer: any;
-    setSelectedCustomer: (val: any) => void;
-    date: Date | null | undefined;
-    setDate: (val: Date | null | undefined) => void;
-    selectedIndustry: any;
-    setSelectedIndustry: (val: any) => void;
-    selectedLanguage: any;
-    setSelectedLanguage: (val: any) => void;
+    settings: SessionSettings;
+    onChange: (field: keyof SessionSettings, value: any) => void;
 }
 
-export default function ConfigurationPanel(props: ConfigurationPanelProps) {
-    const {
-        sessionName, selectedCustomer, date, selectedIndustry, selectedLanguage,
-        setSessionName, setSelectedCustomer, setDate, setSelectedIndustry, setSelectedLanguage,
-    } = props
+export default function ConfigurationPanel({settings, onChange}: ConfigurationPanelProps) {
+    const { sessionName, customer, date, industry, language } = settings;
 
     const customers = [{ name: 'Acme Corp', code: 'ACME' }, { name: 'Globex', code: 'GLBX' }];
-    const industries = [{ name: 'Technology', code: 'TECH' }, { name: 'Finance', code: 'FIN' }];
+    const industries = [{ name: 'Generic', code: 'GEN' }, { name: 'Technology', code: 'TECH' }, { name: 'Finance', code: 'FIN' }];
     const languages = [{ name: 'English', code: 'EN' }, { name: 'Dutch', code: 'NL' }];
 
     return (
@@ -37,7 +27,7 @@ export default function ConfigurationPanel(props: ConfigurationPanelProps) {
                     <InputText
                         id="sname"
                         value={sessionName}
-                        onChange={(e) => setSessionName(e.target.value)}
+                        onChange={(e) => onChange('sessionName', e.target.value)}
                         placeholder="e.g. Q1 Review"
                     />
                 </div>
@@ -45,8 +35,8 @@ export default function ConfigurationPanel(props: ConfigurationPanelProps) {
                 <div className="flex flex-column gap-2">
                     <label className="text-xs font-medium text-gray-400">CUSTOMER</label>
                     <Dropdown
-                        value={selectedCustomer}
-                        onChange={(e) => setSelectedCustomer(e.value)}
+                        value={customer}
+                        onChange={(e) => onChange('customer', e.value)}
                         options={customers}
                         optionLabel="name"
                         placeholder="Select a Customer"
@@ -57,7 +47,7 @@ export default function ConfigurationPanel(props: ConfigurationPanelProps) {
                     <label className="text-xs font-medium text-gray-400">DATE</label>
                     <Calendar
                         value={date}
-                        onChange={(e) => setDate(e.value)}
+                        onChange={(e) => onChange('date', e.value)}
                         showIcon
                         dateFormat="yy-mm-dd"
                     />
@@ -66,8 +56,8 @@ export default function ConfigurationPanel(props: ConfigurationPanelProps) {
                 <div className="flex flex-column gap-2">
                     <label className="text-xs font-medium text-gray-400">INDUSTRY</label>
                     <Dropdown
-                        value={selectedIndustry}
-                        onChange={(e) => setSelectedIndustry(e.value)}
+                        value={industry}
+                        onChange={(e) => onChange('industry', e.value)}
                         options={industries}
                         optionLabel="name"
                         placeholder="Select Industry"
@@ -77,8 +67,8 @@ export default function ConfigurationPanel(props: ConfigurationPanelProps) {
                 <div className="flex flex-column gap-2">
                     <label className="text-xs font-medium text-gray-400">LANGUAGE</label>
                     <Dropdown
-                        value={selectedLanguage}
-                        onChange={(e) => setSelectedLanguage(e.value)}
+                        value={language}
+                        onChange={(e) => onChange('language', e.value)}
                         options={languages}
                         optionLabel="name"
                         placeholder="Select Language"

@@ -8,6 +8,9 @@ def scan_directory(path: Path) -> List[dict]:
     """
     nodes = []
 
+    # Files to hide in the UI
+    BLOCKED_FILES = {'intro.pptx', 'outro.pptx', 'Thumbs.db'}
+
     # Safety check
     if not path.exists():
         return []
@@ -17,7 +20,7 @@ def scan_directory(path: Path) -> List[dict]:
         items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
 
         for item in items:
-            if item.name.startswith('.') or item.name == 'Thumbs.db':
+            if item.name.startswith('.') or item.name in BLOCKED_FILES:
                 continue
 
             node = {

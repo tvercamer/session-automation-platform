@@ -3,9 +3,9 @@ process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 // Imports
 import { spawn, ChildProcess } from 'child_process'
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, net } from 'electron'
 import * as path from 'path'
-import * as url from 'url'
+import { pathToFileURL } from 'url';
 
 // Global references
 const isDev = !app.isPackaged;
@@ -19,11 +19,7 @@ function createMainWindow() {
     // Determine the URL to load
     const startURL = isDev
         ? devUrl
-        : url.format({
-            pathname: path.join(__dirname, '../../ui/dist/index.html'),
-            protocol: 'file:',
-            slashes: true,
-        });
+        : pathToFileURL(path.join(__dirname, '../../ui/dist/index.html')).href;
 
     // Create the browser window.
     mainBrowserWindow = new BrowserWindow({
@@ -95,6 +91,39 @@ function exitPytonProcess() {
     }
 }
 
+const requestPython = (method: string, endpoint: string, body: any = null) => {
+    return new Promise((resolve, reject) => {
+        const request = net.request({
+            method,
+            protocol: 'http:',
+            hostname: '127.0.0.1',
+            port: 8000,
+            path: endpoint
+        });
+
+        request.on('response', (response) => {
+            let data = '';
+            response.on('data', (chunk) => data += chunk.toString());
+            response.on('end', () => {
+                try {
+                    resolve(JSON.parse(data));
+                } catch (e) {
+                    resolve(data);
+                }
+            });
+        });
+
+        request.on('error', (error) => reject(error));
+
+        if (body) {
+            request.setHeader('Content-Type', 'application/json');
+            request.write(JSON.stringify(body));
+        }
+
+        request.end();
+    });
+};
+
 // ---------- APP LIFECYLCE MANAGEMENT ---------- \\
 app.whenReady().then(() => {
     createPythonProcess();
@@ -137,4 +166,16 @@ ipcMain.handle('dialog:openDirectory', async () => {
     } else {
         return filePaths[0];
     }
+});
+
+ipcMain.handle('settings:get', async () => {
+    return await requestPython('GET', '/settings');
+});
+
+ipcMain.handle('settings:save', async (event, data) => {
+    return await requestPython('POST', '/settings', data);
+});
+
+ipcMain.handle('library:get', async () => {
+    return await requestPython('GET', '/library');
 });

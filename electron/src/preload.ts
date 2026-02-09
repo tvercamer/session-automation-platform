@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     help: () => ipcRenderer.send('help'),
     selectFolder: () => ipcRenderer.invoke('dialog:openDirectory'),
     getSettings: () => ipcRenderer.invoke('settings:get'),
-    saveSettings: (data: any) => ipcRenderer.send('settings:save', data)
+    saveSettings: (data: any) => ipcRenderer.invoke('settings:save', data),
+    getLibrary: () => ipcRenderer.invoke('library:get'),
 });

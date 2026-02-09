@@ -7,8 +7,9 @@ declare global {
             toggleDevTools: () => void;
             help: () => void;
             selectFolder: () => Promise<string | null>;
-            getSettings: () => void;
-            saveSettings: () => void;
+            getSettings: () => Promise<any>;
+            saveSettings: (data: any) => Promise<any>;
+            getLibrary: () => Promise<any[]>;
         };
     }
 }

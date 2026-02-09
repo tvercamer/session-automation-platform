@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { InputText } from 'primereact/inputtext';
+import { Button } from 'primereact/button';
 import type { Section } from '../../types/session';
 import { SortableFileItem } from './SortableFileItem';
 
@@ -13,17 +14,37 @@ interface SortableSectionProps {
     onRemoveItem: (sectionId: string, itemId: string) => void;
     onEditTitle: (id: string, newTitle: string) => void;
     onAddSection: (index: number) => void;
+    isEditing: boolean;
+    onStartEditing: () => void;
 }
 
 export function SortableSection({
                                     section,
                                     sectionIndex,
-                                    sectionsCount,
+                                    // sectionsCount,
                                     onRemoveSection,
                                     onRemoveItem,
                                     onEditTitle,
-                                    onAddSection
+                                    onAddSection,
+                                    isEditing,
+                                    onStartEditing
                                 }: SortableSectionProps) {
+
+    const [titleValue, setTitleValue] = useState(section.title);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Sync if prop changes
+    useEffect(() => {
+        setTitleValue(section.title);
+    }, [section.title]);
+
+    // Auto-select text on edit
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
 
     const {
         attributes,
@@ -35,10 +56,9 @@ export function SortableSection({
     } = useSortable({
         id: section.id,
         data: { type: 'SECTION', section },
-        disabled: section.isLocked // Locked sections cannot be dragged
+        disabled: section.isLocked
     });
 
-    // Style for the wrapper (handles movement)
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
@@ -46,93 +66,106 @@ export function SortableSection({
         marginBottom: '0.25rem'
     };
 
-    // --- LOCAL STATE (Title Editing) ---
-    const [isEditing, setIsEditing] = useState(false);
-    const [title, setTitle] = useState(section.title);
-
-    const saveTitle = () => {
-        setIsEditing(false);
-        if (title.trim() !== "") {
-            onEditTitle(section.id, title);
+    const handleBlur = () => {
+        if (titleValue.trim()) {
+            onEditTitle(section.id, titleValue);
         } else {
-            setTitle(section.title); // Revert if empty
+            setTitleValue(section.title);
+            onEditTitle(section.id, section.title);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        e.stopPropagation(); // Allow spaces
+        if (e.key === 'Enter') {
+            handleBlur();
         }
     };
 
     return (
-        // WRAPPER: Holds the Ref (Draggable)
-        <div ref={setNodeRef} style={style}>
-
-            {/* THE VISIBLE CARD */}
+        <div
+            ref={setNodeRef}
+            style={style}
+            data-section-id={section.id}
+        >
             <div className={`session-section ${section.isLocked ? 'locked' : ''}`}>
 
-                {/* HEADER: Drag Handle + Title + Actions */}
-                <div
-                    className="flex align-items-center justify-content-between mb-2 pb-1 border-none"
-                    {...attributes}
-                    {...listeners}
-                >
-                    <div className="flex align-items-center gap-2 text-gray-200">
-                        {/* Drag Handle / Lock Icon */}
-                        {section.isLocked ? (
-                            <i className="pi pi-lock text-xs text-gray-500"></i>
-                        ) : (
-                            <i className="pi pi-bars text-xs text-gray-600 cursor-move"></i>
-                        )}
+                {/* HEADER */}
+                <div className="flex align-items-center justify-content-between mb-2 pb-1 border-none">
 
-                        {/* Editable Title */}
-                        {isEditing ? (
-                            <InputText
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                onBlur={saveTitle}
-                                onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-                                autoFocus
-                                className="py-0 px-1 h-2rem text-sm"
-                                onPointerDown={(e) => e.stopPropagation()} // Allow interaction
-                            />
-                        ) : (
-                            <span
-                                className="font-bold text-sm cursor-text"
-                                onPointerDown={(e) => { e.stopPropagation(); setIsEditing(true); }} // Stop drag to edit
-                            >
+                     {/* LEFT: Drag Handle & Title */}
+                         <div className="flex align-items-center gap-2 text-gray-200 flex-grow-1">
+
+                             {/* DRAG HANDLE: Listeners are ONLY here now */}
+                             {section.isLocked ? (
+                                 <i className="pi pi-lock text-xs text-gray-500"></i>
+                             ) : (
+                                 <i
+                                     className="pi pi-bars text-xs text-gray-600 cursor-move p-2"
+                                     {...attributes}
+                                     {...listeners}
+                                 ></i>
+                             )}
+
+                             {isEditing ? (
+                                 <InputText
+                                     ref={inputRef}
+                                     value={titleValue}
+                                     onChange={(e) => setTitleValue(e.target.value)}
+                                     onBlur={handleBlur}
+                                     onKeyDown={handleKeyDown}
+                                     // Stop propagation so we can click inside without triggering DnD
+                                     onPointerDown={(e) => e.stopPropagation()}
+                                     className="p-inputtext-sm py-1 h-2rem text-sm flex-grow-1"
+                                 />
+                             ) : (
+                                 <span
+                                     className="font-bold text-sm cursor-text hover:text-blue-500 transition-colors flex-grow-1"
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         onStartEditing();
+                                     }}
+                                 >
                                 {section.title}
                             </span>
-                        )}
-                    </div>
+                             )}
+                         </div>
 
-                    {/* Section Actions */}
-                    {!section.isLocked && (
-                        <div className="flex gap-1">
-                            {/* Edit Icon */}
-                            <i className="pi pi-pencil text-gray-500 hover:text-white cursor-pointer text-xs"
-                               onPointerDown={(e) => e.stopPropagation()}
-                               onClick={() => setIsEditing(true)}
-                            ></i>
-
-                            {/* Delete Icon */}
-                            <i className="pi pi-trash text-gray-500 hover:text-red-500 cursor-pointer text-xs ml-2"
-                               onPointerDown={(e) => e.stopPropagation()}
-                               onClick={(e) => onRemoveSection(e, section.id)}
-                            ></i>
-                        </div>
-                    )}
+                     {/* RIGHT: Actions */}
+                         {!section.isLocked && (
+                             <div className="flex gap-1 align-items-center ml-2">
+                                 <Button
+                                     icon="pi pi-pencil"
+                                     rounded text size="small"
+                                     severity="secondary"
+                                     className="h-2rem w-2rem text-gray-500 hover:text-white"
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         onStartEditing();
+                                     }}
+                                 />
+                                 <Button
+                                     icon="pi pi-trash"
+                                     rounded text size="small"
+                                     severity="danger"
+                                     className="h-2rem w-2rem"
+                                     onClick={(e) => onRemoveSection(e, section.id)}
+                                 />
+                             </div>
+                         )}
                 </div>
 
-                {/* ITEMS LIST (Wrapped in SortableContext for inner drag) */}
+                {/* ITEMS */}
                 <SortableContext
                     items={section.items.map((i) => i.id)}
                     strategy={verticalListSortingStrategy}
                 >
                     <div className="flex flex-column min-h-2rem">
-                        {/* Empty State Placeholder */}
                         {section.items.length === 0 && !section.isLocked && (
-                            <div className="text-center py-2 text-xs text-gray-600 border-1 border-dashed surface-border border-round mb-2">
+                            <div className="text-center py-2 text-xs text-gray-600 border-1 border-dashed surface-border border-round mb-2 pointer-events-none">
                                 Drop files here
                             </div>
                         )}
-
-                        {/* Render Files */}
                         {section.items.map((item) => (
                             <SortableFileItem
                                 key={item.id}
@@ -145,16 +178,15 @@ export function SortableSection({
                 </SortableContext>
             </div>
 
-            {/* DOT SEPARATOR (Sibling to Card, inside Wrapper) */}
-            {sectionIndex < sectionsCount - 1 && (
-                <div className="section-separator">
-                    <div
-                        className="dot"
-                        onClick={() => onAddSection(sectionIndex + 1)}
-                        title="Add Section"
-                    ></div>
-                </div>
-            )}
+            {/* DOT SEPARATOR: Adds to index + 1 */}
+            {/* The first dot is handled in PlaylistPanel, this handles subsequent dots */}
+            <div className="section-separator" data-insert-index={sectionIndex + 1}>
+                <div
+                    className="dot"
+                    onClick={() => onAddSection(sectionIndex + 1)}
+                    title="Add Section Here"
+                ></div>
+            </div>
         </div>
     );
 }

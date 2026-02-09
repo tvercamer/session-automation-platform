@@ -1,4 +1,4 @@
-import { useRef, type MouseEvent, type DragEvent } from 'react';
+import { useRef, useState, useEffect, type MouseEvent, type DragEvent } from 'react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Button } from 'primereact/button';
@@ -15,8 +15,26 @@ interface PlaylistPanelProps {
 
 export default function PlaylistPanel({ sections, setSections }: PlaylistPanelProps) {
     const toast = useRef<Toast>(null);
+    const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+    const [justAddedSectionId, setJustAddedSectionId] = useState<string | null>(null);
 
-    // Initialize DnD Logic from Custom Hook
+    // Filter out Intro/Outro from the draggable list so they don't appear twice
+    // We assume their IDs are 'intro' and 'outro' or titles are specific.
+    // Adjust this filter if your IDs are different.
+    const visibleSections = sections.filter(s =>
+        s.id !== 'intro' &&
+        s.id !== 'outro' &&
+        s.title.toLowerCase() !== 'introduction' &&
+        s.title.toLowerCase() !== 'outro'
+    );
+
+    useEffect(() => {
+        if (justAddedSectionId) {
+            setEditingSectionId(justAddedSectionId);
+            setJustAddedSectionId(null);
+        }
+    }, [justAddedSectionId]);
+
     const {
         sensors,
         activeId,
@@ -28,18 +46,42 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
         onDragEnd
     } = usePlaylistDnD(sections, setSections);
 
-    // --- CRUD ACTIONS (State Management) ---
+    // --- ACTIONS ---
 
     const handleAddSection = (index: number) => {
+        const newId = Math.random().toString(36).substring(2, 9);
         const newSec: Section = {
-            id: Math.random().toString(36).substring(2, 9),
+            id: newId,
             title: 'New Section',
             isLocked: false,
             items: []
         };
+
         const updated = [...sections];
-        updated.splice(index, 0, newSec);
+        // Insert into the full list, accounting for the fact that we might have hidden Intro/Outro
+        // If we drop on the last dot of visible sections, we want it before Outro.
+
+        // Find the index in the REAL sections array based on the visible index
+        let realIndex = updated.length - 1; // Default to before last (Outro)
+
+        if (index === 0) {
+            // Start of list (after Intro)
+            const introIdx = updated.findIndex(s => s.id === 'intro' || s.title === 'Introduction');
+            realIndex = introIdx + 1;
+        } else if (index < visibleSections.length) {
+            // Middle of list
+            const prevVisible = visibleSections[index - 1];
+            const prevIdx = updated.findIndex(s => s.id === prevVisible.id);
+            realIndex = prevIdx + 1;
+        }
+
+        // Safety check: if empty list, ensure we don't crash
+        if (realIndex < 0) realIndex = 0;
+        if (realIndex > updated.length) realIndex = updated.length;
+
+        updated.splice(realIndex, 0, newSec);
         setSections(updated);
+        setJustAddedSectionId(newId);
     };
 
     const handleRemoveSection = (e: MouseEvent, id: string) => {
@@ -63,69 +105,118 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
 
     const handleEditTitle = (id: string, newTitle: string) => {
         setSections(sections.map(s => s.id === id ? { ...s, title: newTitle } : s));
+        setEditingSectionId(null);
     };
 
-    // --- SMART DROP (Library -> Playlist) ---
+    // --- SMART DROP HANDLER ---
     const onNativeDrop = async (e: DragEvent) => {
-        e.preventDefault(); // Important to allow drop
+        e.preventDefault();
         const json = e.dataTransfer.getData('application/json');
         if (!json) return;
 
-        // Logic: Add to the first unlocked section (defaulting to Market Overview usually)
-        const targetSection = sections.find(s => !s.isLocked && s.id !== 'intro') || sections.find(s => !s.isLocked);
-
-        if(!targetSection) {
-            toast.current?.show({ severity: 'warn', summary: 'Locked', detail: 'No unlocked sections available to drop into.' });
-            return;
-        }
-
         try {
             const node = JSON.parse(json);
-            const droppedPath = node.data; // Path from Library
+            const droppedPath = node.data;
+            const droppedLabel = node.label;
 
-            // 1. CALL BACKEND RESOLVER
-            // TODO: In the future, pass the actual session language here
+            const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+
+            // Check targets
+            const insertElement = dropTarget?.closest('[data-insert-index]');
+            const insertIndexAttr = insertElement?.getAttribute('data-insert-index');
+            const sectionElement = dropTarget?.closest('[data-section-id]');
+            const targetSectionId = sectionElement?.getAttribute('data-section-id');
+
             const resolvedFiles = await window.electronAPI.resolveDrop(droppedPath, "EN");
 
             if (!resolvedFiles || resolvedFiles.length === 0) {
-                toast.current?.show({ severity: 'info', summary: 'No files', detail: 'No relevant files found in this selection.' });
+                toast.current?.show({ severity: 'warn', summary: 'Ignored', detail: 'No relevant files found.' });
                 return;
             }
 
-            // 2. TRANSFORM & ADD FILES
             const newItems: FileItem[] = resolvedFiles.map((file: any) => ({
                 id: Math.random().toString(36).substring(2, 9),
                 name: file.name,
-                path: file.path,      // Store real path
+                path: file.path,
                 type: 'file',
-                fileType: file.type   // 'pptx', 'docx', 'xlsx'
+                fileType: file.type
             }));
 
-            const updated = sections.map(s => {
-                if (s.id === targetSection.id) {
-                    return { ...s, items: [...s.items, ...newItems] };
-                }
-                return s;
-            });
+            let updatedSections = [...sections];
 
-            setSections(updated);
-            toast.current?.show({
-                severity: 'success',
-                summary: 'Added',
-                detail: `${newItems.length} file(s) added to ${targetSection.title}`
-            });
+            if (insertIndexAttr !== null && insertIndexAttr !== undefined) {
+                // CASE A: Dropped on a Dot
+                const visIndex = parseInt(insertIndexAttr, 10);
+
+                // Determine insertion point in the MAIN array
+                // Same logic as handleAddSection
+                let realIndex = updatedSections.length - 1;
+
+                if (visIndex === 0) {
+                    const introIdx = updatedSections.findIndex(s => s.id === 'intro' || s.title === 'Introduction');
+                    realIndex = introIdx + 1;
+                } else {
+                    const prevVisible = visibleSections[visIndex - 1];
+                    const prevIdx = updatedSections.findIndex(s => s.id === prevVisible.id);
+                    realIndex = prevIdx + 1;
+                }
+
+                const newId = Math.random().toString(36).substring(2, 9);
+                const newSec: Section = {
+                    id: newId,
+                    title: droppedLabel,
+                    isLocked: false,
+                    items: newItems
+                };
+                updatedSections.splice(realIndex, 0, newSec);
+                setJustAddedSectionId(newId);
+                toast.current?.show({ severity: 'success', summary: 'Created', detail: `Created section` });
+
+            } else if (targetSectionId) {
+                // CASE B: Dropped on Section
+                const targetSec = updatedSections.find(s => s.id === targetSectionId);
+                if (targetSec?.isLocked) {
+                    toast.current?.show({ severity: 'error', summary: 'Locked', detail: 'Section is locked.' });
+                    return;
+                }
+                updatedSections = updatedSections.map(s => {
+                    if (s.id === targetSectionId) {
+                        return { ...s, items: [...s.items, ...newItems] };
+                    }
+                    return s;
+                });
+                toast.current?.show({ severity: 'success', summary: 'Added', detail: `Added to ${targetSec?.title}` });
+
+            } else {
+                // CASE C: Background Drop -> New Section before Outro
+                const newId = Math.random().toString(36).substring(2, 9);
+                const newSec: Section = {
+                    id: newId,
+                    title: droppedLabel,
+                    isLocked: false,
+                    items: newItems
+                };
+
+                // Find Outro index to insert before it
+                const outroIndex = updatedSections.findIndex(s => s.id === 'outro' || s.title === 'Outro');
+                const insertPos = outroIndex >= 0 ? outroIndex : updatedSections.length;
+
+                updatedSections.splice(insertPos, 0, newSec);
+                setJustAddedSectionId(newId);
+                toast.current?.show({ severity: 'success', summary: 'Created', detail: `Created section` });
+            }
+
+            setSections(updatedSections);
 
         } catch(err) {
-            console.error("Failed to parse drop data", err);
-            toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Failed to process dropped item.' });
+            console.error("Drop failed", err);
         }
     };
 
-    // --- RENDER ---
     return (
         <div className="flex-1 surface-ground flex flex-column h-full"
              onDrop={onNativeDrop}
-             onDragOver={(e) => e.preventDefault()} // Necessary to allow dropping
+             onDragOver={(e) => e.preventDefault()}
         >
             <Toast ref={toast} />
             <ConfirmPopup />
@@ -139,8 +230,29 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
                 </div>
             </div>
 
-            {/* MAIN LIST AREA */}
+            {/* LIST AREA */}
             <div className="flex-grow-1 overflow-y-auto p-3 custom-scrollbar">
+
+                {/* 1. FIXED INTRO */}
+                <div className="p-3 border-1 border-dashed surface-border border-round opacity-60 flex align-items-center justify-content-center bg-black-alpha-10 mb-3">
+                    <i className="pi pi-lock mr-2 text-xs"></i>
+                    <span className="font-bold text-sm">Introduction</span>
+                </div>
+
+                {/* 2. FIRST DOT (Between Intro and First Section) */}
+                <div
+                    className="section-separator mb-3"
+                    data-insert-index="0"
+                    style={{ height: '10px' }} // Give it some hit area
+                >
+                    <div
+                        className="dot"
+                        onClick={() => handleAddSection(0)}
+                        title="Add Section Here"
+                    ></div>
+                </div>
+
+                {/* 3. DYNAMIC SECTIONS (Filtered) */}
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
@@ -148,25 +260,23 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
                     onDragOver={onDragOver}
                     onDragEnd={onDragEnd}
                 >
-                    <SortableContext
-                        items={sections.map(s => s.id)}
-                        strategy={verticalListSortingStrategy}
-                    >
-                        {sections.map((section, index) => (
+                    <SortableContext items={visibleSections.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                        {visibleSections.map((section, index) => (
                             <SortableSection
                                 key={section.id}
                                 section={section}
                                 sectionIndex={index}
-                                sectionsCount={sections.length}
+                                sectionsCount={visibleSections.length}
+                                isEditing={editingSectionId === section.id}
+                                onStartEditing={() => setEditingSectionId(section.id)}
+                                onEditTitle={handleEditTitle}
                                 onRemoveSection={handleRemoveSection}
                                 onRemoveItem={handleRemoveItem}
-                                onEditTitle={handleEditTitle}
                                 onAddSection={handleAddSection}
                             />
                         ))}
                     </SortableContext>
 
-                    {/* DRAG PREVIEW OVERLAY */}
                     <DragOverlay dropAnimation={dropAnimationConfig}>
                         {activeId && activeItem ? (
                             <div className="p-2 surface-card border-1 surface-border border-round shadow-2" style={{ width: '300px' }}>
@@ -177,6 +287,12 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
                         ) : null}
                     </DragOverlay>
                 </DndContext>
+
+                {/* 4. FIXED OUTRO */}
+                <div className="p-3 border-1 border-dashed surface-border border-round opacity-60 flex align-items-center justify-content-center bg-black-alpha-10 mt-2">
+                    <i className="pi pi-lock mr-2 text-xs"></i>
+                    <span className="font-bold text-sm">Outro</span>
+                </div>
             </div>
         </div>
     );

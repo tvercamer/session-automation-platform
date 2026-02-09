@@ -179,3 +179,7 @@ ipcMain.handle('settings:save', async (event, data) => {
 ipcMain.handle('library:get', async () => {
     return await requestPython('GET', '/library');
 });
+
+ipcMain.handle('library:resolve', async (event, args) => {
+    return await requestPython('POST', '/library/resolve', args);
+});

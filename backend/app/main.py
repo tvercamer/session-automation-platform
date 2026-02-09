@@ -1,6 +1,6 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
-from library import scan_directory
+from library import scan_directory, resolve_dropped_item
 from pydantic import BaseModel
 from pathlib import Path
 import uvicorn
@@ -35,6 +35,11 @@ app.add_middleware(
 class SettingsModel(BaseModel):
     library_path: str
     output_path: str
+
+class ResolveRequest(BaseModel):
+    path: str
+    language: str = "EN"
+    industry: str = None
 
 # --- ENDPOINTS ---
 
@@ -82,6 +87,10 @@ def get_library():
         return [{"key": "error", "label": "Library path not found", "icon": "pi pi-exclamation-triangle", "children": []}]
 
     return scan_directory(lib_path)
+
+@app.post("/library/resolve")
+def resolve_drop(req: ResolveRequest):
+    return resolve_dropped_item(req.path, req.language, req.industry)
 
 if __name__ == "__main__":
     port = 8000

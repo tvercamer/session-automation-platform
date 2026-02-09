@@ -65,32 +65,59 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
         setSections(sections.map(s => s.id === id ? { ...s, title: newTitle } : s));
     };
 
-    // --- NATIVE DROP (Library -> Playlist) ---
-    // This handles dropping items from the Library Tree (which uses HTML5 Drag/Drop)
-    const onNativeDrop = (e: DragEvent) => {
+    // --- SMART DROP (Library -> Playlist) ---
+    const onNativeDrop = async (e: DragEvent) => {
+        e.preventDefault(); // Important to allow drop
         const json = e.dataTransfer.getData('application/json');
         if (!json) return;
 
-        // Logic: Add to the first unlocked section (or specific one if we tracked hover)
-        // For now, defaulting to the first unlocked section that isn't the Intro
+        // Logic: Add to the first unlocked section (defaulting to Market Overview usually)
         const targetSection = sections.find(s => !s.isLocked && s.id !== 'intro') || sections.find(s => !s.isLocked);
 
-        if(!targetSection) return;
+        if(!targetSection) {
+            toast.current?.show({ severity: 'warn', summary: 'Locked', detail: 'No unlocked sections available to drop into.' });
+            return;
+        }
 
         try {
             const node = JSON.parse(json);
-            const newItem: FileItem = {
-                id: Math.random().toString(36).substring(2, 9),
-                name: node.label,
-                type: 'file',
-                fileType: 'word' // TODO: Now defaulting to word, but should probably be something else
-            };
+            const droppedPath = node.data; // Path from Library
 
-            const updated = sections.map(s => s.id === targetSection.id ? { ...s, items: [...s.items, newItem] } : s);
+            // 1. CALL BACKEND RESOLVER
+            // TODO: In the future, pass the actual session language here
+            const resolvedFiles = await window.electronAPI.resolveDrop(droppedPath, "EN");
+
+            if (!resolvedFiles || resolvedFiles.length === 0) {
+                toast.current?.show({ severity: 'info', summary: 'No files', detail: 'No relevant files found in this selection.' });
+                return;
+            }
+
+            // 2. TRANSFORM & ADD FILES
+            const newItems: FileItem[] = resolvedFiles.map((file: any) => ({
+                id: Math.random().toString(36).substring(2, 9),
+                name: file.name,
+                path: file.path,      // Store real path
+                type: 'file',
+                fileType: file.type   // 'pptx', 'docx', 'xlsx'
+            }));
+
+            const updated = sections.map(s => {
+                if (s.id === targetSection.id) {
+                    return { ...s, items: [...s.items, ...newItems] };
+                }
+                return s;
+            });
+
             setSections(updated);
-            toast.current?.show({ severity: 'success', summary: 'Added', detail: `${node.label} added to ${targetSection.title}` });
-        } catch(e) {
-            console.error("Failed to parse drop data", e);
+            toast.current?.show({
+                severity: 'success',
+                summary: 'Added',
+                detail: `${newItems.length} file(s) added to ${targetSection.title}`
+            });
+
+        } catch(err) {
+            console.error("Failed to parse drop data", err);
+            toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Failed to process dropped item.' });
         }
     };
 
@@ -98,7 +125,7 @@ export default function PlaylistPanel({ sections, setSections }: PlaylistPanelPr
     return (
         <div className="flex-1 surface-ground flex flex-column h-full"
              onDrop={onNativeDrop}
-             onDragOver={(e) => e.preventDefault()}
+             onDragOver={(e) => e.preventDefault()} // Necessary to allow dropping
         >
             <Toast ref={toast} />
             <ConfirmPopup />

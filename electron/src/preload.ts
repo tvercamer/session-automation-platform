@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => ipcRenderer.invoke('settings:get'),
     saveSettings: (data: any) => ipcRenderer.invoke('settings:save', data),
     getLibrary: () => ipcRenderer.invoke('library:get'),
+    resolveDrop: (path: string, language: string) => ipcRenderer.invoke('library:resolve', { path, language })
 });

@@ -3,7 +3,7 @@ process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 // Imports
 import { spawn, ChildProcess } from 'child_process'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import * as path from 'path'
 import * as url from 'url'
 
@@ -126,4 +126,15 @@ ipcMain.on('toggle-dev-tools', () => {
 
 ipcMain.on('help', () => {
     shell.openExternal('https://google.com?q=project-help-page');
+});
+
+ipcMain.handle('dialog:openDirectory', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openDirectory']
+    });
+    if (canceled) {
+        return null;
+    } else {
+        return filePaths[0];
+    }
 });

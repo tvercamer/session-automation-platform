@@ -65,6 +65,37 @@ html, body, #root {
 .p-dropdown { padding: 0 !important; align-items: center; }
 .p-dropdown-trigger { width: 2.5rem !important; background: transparent !important; }
 
+.p-button {
+  height: 36px !important;
+  font-size: 0.9rem !important;
+  padding: 0 1rem !important;
+}
+
+/* Reset radius for items inside a group */
+.p-inputgroup .p-inputtext,
+.p-inputgroup .p-button {
+  border-radius: 0 !important;
+}
+
+/* Restore radius only on the outer edges */
+.p-inputgroup .p-inputtext:first-child,
+.p-inputgroup .p-button:first-child {
+  border-top-left-radius: 4px !important;
+  border-bottom-left-radius: 4px !important;
+}
+
+.p-inputgroup .p-inputtext:last-child,
+.p-inputgroup .p-button:last-child {
+  border-top-right-radius: 4px !important;
+  border-bottom-right-radius: 4px !important;
+}
+
+/* Ensure button border matches input border color */
+.p-inputgroup .p-button {
+  border: 1px solid var(--input-border) !important;
+  border-left: none !important;
+}
+
 /* 4. SCROLLBARS */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface-ground); }

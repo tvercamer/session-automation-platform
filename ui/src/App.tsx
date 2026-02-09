@@ -3,6 +3,7 @@ import type { TreeNode } from 'primereact/treenode';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
 import { Toast } from 'primereact/toast';
 import AppMenu from "./components/AppMenu.tsx";
+import SettingsDialog from "./components/SettingsDialog.tsx";
 import ConfigurationPanel from './components/ConfigurationPanel';
 import LibraryPanel from './components/LibraryPanel';
 import PlaylistPanel from './components/PlaylistPanel/PlaylistPanel.tsx';
@@ -13,6 +14,7 @@ export default function App() {
     const toast = useRef<Toast>(null);
 
     // --- STATE MANAGEMENT ---
+    const [isSettingsVisible, setIsSettingsVisible] = useState(false);
     const [sessionName, setSessionName] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [date, setDate] = useState<Date | null | undefined>(new Date(Date.now() + 14*24*60*60*1000)); // Default +14 days
@@ -68,7 +70,7 @@ export default function App() {
 
     // --- ACTIONS ---
     const handleSettings = () => {
-        toast.current?.show({ severity: 'info', summary: 'Settings', detail: 'Settings dialog would open here.' });
+        setIsSettingsVisible(true);
     };
 
     const handleQuit = () => {
@@ -97,6 +99,12 @@ export default function App() {
     return (
         <div className='flex flex-column h-screen overflow-hidden text-white'>
             <Toast ref={toast} />
+
+            <SettingsDialog
+                visible={isSettingsVisible}
+                onHide={() => setIsSettingsVisible(false)}
+            />
+
             <AppMenu
                 onSettings={handleSettings}
                 onQuit={handleQuit}

@@ -30,14 +30,16 @@ export function SortableSection({
                                 }: SortableSectionProps) {
 
     const [titleValue, setTitleValue] = useState(section.title);
+
+    // --- NEW: Local Collapse State ---
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Sync state with props
     useEffect(() => {
         setTitleValue(section.title);
     }, [section.title]);
 
-    // Auto-focus when editing
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus();
@@ -70,31 +72,34 @@ export function SortableSection({
             onEditTitle(section.id, titleValue);
         } else {
             setTitleValue(section.title);
-            onEditTitle(section.id, section.title); // Cancel edit
+            onEditTitle(section.id, section.title);
         }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        e.stopPropagation(); // Allow spaces in input
+        e.stopPropagation();
         if (e.key === 'Enter') {
             handleBlur();
         }
+    };
+
+    // Toggle Collapse Handler
+    const toggleCollapse = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent drag or edit start
+        setIsCollapsed(!isCollapsed);
     };
 
     return (
         <div
             ref={setNodeRef}
             style={style}
-            // --- CRITICAL FIX: This allows PlaylistPanel to detect the drop target ---
             data-section-id={section.id}
         >
             <div className={`session-section ${section.isLocked ? 'locked' : ''} surface-card border-1 surface-border border-round mb-2`}>
 
                 {/* HEADER */}
-                <div
-                    className="flex align-items-center justify-content-between p-2 border-bottom-1 surface-border"
-                >
-                    {/* LEFT: Drag Handle & Title */}
+                <div className="flex align-items-center justify-content-between p-2 border-bottom-1 surface-border">
+                    {/* LEFT: Drag Handle, Chevron, & Title */}
                     <div className="flex align-items-center gap-2 text-gray-200 flex-grow-1 overflow-hidden">
 
                         {/* Drag Handle */}
@@ -102,11 +107,17 @@ export function SortableSection({
                             <i className="pi pi-lock text-xs text-gray-500 mr-2"></i>
                         ) : (
                             <i
-                                className="pi pi-bars text-gray-500 cursor-move mr-2 hover:text-white"
+                                className="pi pi-bars text-gray-500 cursor-move mr-1 hover:text-white"
                                 {...attributes}
                                 {...listeners}
                             ></i>
                         )}
+
+                        {/* --- NEW: COLLAPSE CHEVRON --- */}
+                        <i
+                            className={`pi ${isCollapsed ? 'pi-chevron-right' : 'pi-chevron-down'} text-xs text-gray-500 cursor-pointer hover:text-white mr-1`}
+                            onClick={toggleCollapse}
+                        ></i>
 
                         {isEditing ? (
                             <InputText
@@ -120,7 +131,7 @@ export function SortableSection({
                             />
                         ) : (
                             <span
-                                className="font-bold text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis cursor-pointer hover:text-primary transition-colors"
+                                className="font-bold text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis cursor-pointer hover:text-primary transition-colors select-none"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onStartEditing();
@@ -128,6 +139,10 @@ export function SortableSection({
                                 title="Click to edit"
                             >
                                 {section.title}
+                                {/* Optional: Show count if collapsed */}
+                                {isCollapsed && section.items.length > 0 && (
+                                    <span className="ml-2 text-xs text-gray-500 font-normal">({section.items.length} files)</span>
+                                )}
                             </span>
                         )}
                     </div>
@@ -156,27 +171,29 @@ export function SortableSection({
                     )}
                 </div>
 
-                {/* ITEMS LIST */}
-                <div className="p-2 min-h-3rem">
-                    <SortableContext
-                        items={section.items.map(i => i.id)}
-                        strategy={verticalListSortingStrategy}
-                    >
-                        {section.items.length === 0 && !section.isLocked && (
-                            <div className="text-center text-xs text-gray-600 font-italic py-3 select-none pointer-events-none">
-                                Drag files here
-                            </div>
-                        )}
-                        {section.items.map((item) => (
-                            <SortableFileItem
-                                key={item.id}
-                                item={item}
-                                isLocked={section.isLocked}
-                                onDelete={() => onRemoveItem(section.id, item.id)}
-                            />
-                        ))}
-                    </SortableContext>
-                </div>
+                {/* ITEMS LIST (Hidden if collapsed) */}
+                {!isCollapsed && (
+                    <div className="p-2 min-h-3rem">
+                        <SortableContext
+                            items={section.items.map(i => i.id)}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            {section.items.length === 0 && !section.isLocked && (
+                                <div className="text-center text-xs text-gray-600 font-italic py-3 select-none pointer-events-none">
+                                    Drag files here
+                                </div>
+                            )}
+                            {section.items.map((item) => (
+                                <SortableFileItem
+                                    key={item.id}
+                                    item={item}
+                                    isLocked={section.isLocked}
+                                    onDelete={() => onRemoveItem(section.id, item.id)}
+                                />
+                            ))}
+                        </SortableContext>
+                    </div>
+                )}
             </div>
 
             {/* DOT SEPARATOR */}

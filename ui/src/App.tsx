@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { TreeNode } from 'primereact/treenode';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
 import { Toast } from 'primereact/toast';
@@ -50,23 +50,25 @@ export default function App() {
             items: [] // Empty locked end
         }
     ]);
-    const [treeNodes] = useState<TreeNode[]>([
-        {
-            key: '0',
-            label: 'Topics',
-            children: [
-                { key: '0-0', label: 'Introduction' },
-                { key: '0-1', label: 'Market Overview' }
-            ]
-        },
-        {
-            key: '1',
-            label: 'Templates',
-            children: [
-                { key: '1-0', label: 'Images.ppt' }
-            ]
+
+    const [libraryNodes, setLibraryNodes] = useState<TreeNode[]>([]);
+
+    const loadLibrary = async () => {
+        try {
+            console.log("Fetching library...");
+            const data = await window.electronAPI.getLibrary();
+            console.log("Library data received:", data);
+
+            // If backend returns an error object (like "path not found"), it will still be a valid array
+            setLibraryNodes(data);
+        } catch (e) {
+            console.error("Failed to load library", e);
         }
-    ]);
+    };
+
+    useEffect(() => {
+        loadLibrary().then()
+    }, [])
 
     // --- ACTIONS ---
     const handleSettings = () => {
@@ -103,6 +105,7 @@ export default function App() {
             <SettingsDialog
                 visible={isSettingsVisible}
                 onHide={() => setIsSettingsVisible(false)}
+                onSettingsChanged={loadLibrary}
             />
 
             <AppMenu
@@ -130,7 +133,7 @@ export default function App() {
                     </SplitterPanel>
 
                     <SplitterPanel size={35} minSize={20} className="flex overflow-hidden border-round-sm">
-                        <LibraryPanel nodes={treeNodes} />
+                        <LibraryPanel nodes={libraryNodes} />
                     </SplitterPanel>
 
                     <SplitterPanel size={40} minSize={20} className="flex overflow-hidden border-round-sm">

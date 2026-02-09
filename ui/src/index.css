@@ -152,3 +152,9 @@ html, body, #root {
   border-style: dashed;
   border-color: #3f3f46;
 }
+
+/* --- Custom colors --- */
+.pi-file.text-orange-500 { color: #f97316 !important; } /* PowerPoint Orange */
+.pi-file.text-blue-500 { color: #3b82f6 !important; }   /* Word Blue */
+.pi-file-excel.text-green-500 { color: #22c55e !important; } /* Excel Green */
+.pi-file-pdf.text-red-500 { color: #ef4444 !important; } /* PDF Red */

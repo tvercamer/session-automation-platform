@@ -23,4 +23,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // --- INTEGRATIONS ---
     getHubspotCompanies: () => ipcRenderer.invoke('hubspot:companies'),
 
+    // --- CONSOLE ---
+    onConsoleLog: (callback: (log: any) => void) => {
+        const subscription = (_event: any, data: any) => callback(data);
+        ipcRenderer.on('app-console', subscription);
+
+        // Return a cleanup function to remove listener
+        return () => ipcRenderer.removeListener('app-console', subscription);
+    }
 });

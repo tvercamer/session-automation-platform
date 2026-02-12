@@ -42,6 +42,19 @@ function createMainWindow() {
 }
 
 // ---------- BACKEND SERVER MANAGEMENT ---------- \\
+
+// Helper to send logs to the frontend ConsolePanel
+function sendLogToWindow(level: string, message: string) {
+    if (mainBrowserWindow) {
+        // Sends event 'app-console' which preload.ts listens for
+        mainBrowserWindow.webContents.send('app-console', {
+            timestamp: new Date().toLocaleTimeString('en-GB'), // HH:MM:SS
+            level: level,
+            message: message.trim()
+        });
+    }
+}
+
 function createPythonProcess(){
     const scriptPath = path.join(__dirname, '../../backend', 'app', 'main.py')
     let pythonPath: string;
@@ -60,23 +73,43 @@ function createPythonProcess(){
     console.log(`Python Path: ${pythonPath}`)
     console.log(`Script Path: ${scriptPath}`)
 
+    // Log to UI
+    sendLogToWindow('INFO', 'Starting Python backend...');
+    sendLogToWindow('DEBUG', `Script: ${scriptPath}`);
+
     pythonProcess = spawn(pythonPath, [scriptPath, `${pythonPort}`])
 
-    // Check for errors
+    // 1. Capture STDOUT (Standard Output)
     if (pythonProcess.stdout) {
         pythonProcess.stdout.on('data', (data) => {
-            console.log('py:stdout:', data.toString());
+            const str = data.toString();
+            console.log('py:stdout:', str);
+            // Forward to UI
+            sendLogToWindow('INFO', str);
         });
     }
 
+    // 2. Capture STDERR (Errors & Logs)
     if (pythonProcess.stderr) {
         pythonProcess.stderr.on('data', (data) => {
-            console.error('py:stderr:', data.toString());
+            const str = data.toString();
+            console.error('py:stderr:', str);
+
+            // Simple heuristic to determine log level from string
+            let level = 'DEBUG';
+            const lower = str.toLowerCase();
+            if (lower.includes('error') || lower.includes('exception') || lower.includes('failed')) level = 'ERROR';
+            else if (lower.includes('warning')) level = 'WARN';
+            else if (lower.includes('info')) level = 'INFO';
+
+            sendLogToWindow(level, str);
         });
     }
 
     pythonProcess.on('close', (code) => {
-        console.log('py:process exited with code:', code);
+        const msg = `Python process exited with code: ${code}`;
+        console.log('py:process exited:', code);
+        sendLogToWindow('WARN', msg);
         pythonProcess = null;
     })
 }

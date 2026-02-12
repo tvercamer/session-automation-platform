@@ -24,6 +24,9 @@ declare global {
 
             // --- Integrations ---
             getHubspotCompanies: () => Promise<any[]>;
+
+            // --- Console Bridge ---
+            onConsoleLog: (callback: (log: any) => void) => () => void;
         };
     }
 }

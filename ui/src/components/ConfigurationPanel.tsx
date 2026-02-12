@@ -98,23 +98,31 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
         // 1. Always update the customer selection first
         onChange('customer', newCustomer);
 
-        // 2. If no customer or no industry data, stop here
-        if (!newCustomer || !newCustomer.industry) return;
+        // 2. Determine the HubSpot industry (if any)
+        const hubspotIndustry = newCustomer?.industry;
 
-        console.log(`Attempting to map HubSpot industry: "${newCustomer.industry}"`);
+        console.log(`Attempting to map HubSpot industry: "${hubspotIndustry}"`);
 
         // 3. Find a match in our internal industry list
-        // We look for an industry where the 'matches' array contains the HubSpot value exactly.
-        const matchedIndustry = availableIndustries.find(ind =>
-            ind.matches && ind.matches.includes(newCustomer.industry!)
-        );
+        let matchedIndustry = null;
 
-        // 4. If found, update the industry dropdown automatically
+        if (hubspotIndustry) {
+            matchedIndustry = availableIndustries.find(ind =>
+                ind.matches && ind.matches.includes(hubspotIndustry)
+            );
+        }
+
+        // 4. Apply Logic: Match OR Fallback
         if (matchedIndustry) {
-            console.log(`Found match! Setting industry to: ${matchedIndustry.label} (${matchedIndustry.code})`);
+            console.log(`Found match! Setting industry to: ${matchedIndustry.label}`);
             onChange('industry', matchedIndustry);
         } else {
-            console.log("No mapping found for this industry.");
+            console.log("No mapping found. Reverting to Default (Generic).");
+            // Find the default 'gen' industry in our available list
+            const defaultInd = availableIndustries.find(i => i.code === 'gen') || availableIndustries[0];
+            if (defaultInd) {
+                onChange('industry', defaultInd);
+            }
         }
     };
 

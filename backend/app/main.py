@@ -2,7 +2,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 import uvicorn
 import json
 import sys
@@ -17,7 +17,7 @@ from library import (
     save_translations
 )
 
-# --- CONFIGURATION  ---
+# --- CONFIGURATION ---
 if sys.platform == "win32":
     APP_DATA_ROOT = Path(os.environ["APPDATA"])
     SETTINGS_DIR = APP_DATA_ROOT / "Datawijs-SAP"
@@ -41,14 +41,15 @@ app.add_middleware(
 # --- DATA MODELS ---
 
 # 1. Settings Models
-class Language(BaseModel):
+class KeyLabel(BaseModel):
     code: str
     label: str
 
 class SettingsModel(BaseModel):
     library_path: str
     output_path: str
-    languages: List[Language] = []
+    languages: List[KeyLabel] = []
+    industries: List[KeyLabel] = []
 
 # 2. Library Models
 class ResolveRequest(BaseModel):
@@ -65,6 +66,30 @@ class TransSavePayload(BaseModel):
     targetPath: str
     entries: Dict[str, Any] # Handles the structured JSON
 
+# --- HELPER: DYNAMIC IGNORE LIST ---
+def get_ignored_terms() -> Set[str]:
+    """
+    Reads settings to build a set of terms (Languages + Industries)
+    that should be hidden from the 'Base' file view.
+    """
+    if not SETTINGS_FILE.exists(): return set()
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            data = json.load(f)
+
+            # Extract Codes (e.g. 'NL', 'healthcare')
+            langs = {l['code'].lower() for l in data.get('languages', [])}
+            inds = {i['code'].lower() for i in data.get('industries', [])}
+
+            # Combine all into one set
+            combined = langs.union(inds)
+
+            # Add uppercase versions to be safe (e.g. 'NL' and 'nl')
+            final_set = combined.union({t.upper() for t in combined})
+            return final_set
+    except:
+        return set()
+
 # --- ENDPOINTS ---
 
 @app.get("/")
@@ -75,17 +100,17 @@ def read_root():
 @app.get("/settings")
 def get_settings():
     if not SETTINGS_FILE.exists():
-        return {"library_path": "", "output_path": "", "languages": []}
+        return {"library_path": "", "output_path": "", "languages": [], "industries": []}
 
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
-            # Ensure languages key exists for backward compatibility
-            if "languages" not in data:
-                data["languages"] = []
+            # Ensure keys exist for backward compatibility
+            if "languages" not in data: data["languages"] = []
+            if "industries" not in data: data["industries"] = []
             return data
     except Exception as e:
-        return {"library_path": "", "output_path": "", "languages": [], "error": str(e)}
+        return {"library_path": "", "output_path": "", "languages": [], "industries": [], "error": str(e)}
 
 @app.post("/settings")
 def save_settings(settings: SettingsModel):
@@ -99,28 +124,28 @@ def save_settings(settings: SettingsModel):
 # --- LIBRARY ENDPOINTS ---
 @app.get("/library")
 def get_library():
-    if not SETTINGS_FILE.exists():
-        return []
+    if not SETTINGS_FILE.exists(): return []
 
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
             path_str = data.get("library_path", "")
-    except:
-        return []
+    except: return []
 
-    if not path_str:
-        return []
-
+    if not path_str: return []
     lib_path = Path(path_str)
     if not lib_path.exists():
         return [{"key": "error", "label": "Library path not found", "icon": "pi pi-exclamation-triangle", "children": []}]
 
-    return scan_directory(lib_path)
+    # Pass dynamic ignore list to scanner
+    ignored = get_ignored_terms()
+    return scan_directory(lib_path, ignored)
 
 @app.post("/library/resolve")
 def resolve_drop(req: ResolveRequest):
-    return resolve_dropped_item(req.path)
+    # Pass dynamic ignore list to resolver
+    ignored = get_ignored_terms()
+    return resolve_dropped_item(req.path, ignored)
 
 # --- TRANSLATION ENDPOINTS ---
 @app.post("/library/translations/folders")
@@ -141,6 +166,7 @@ def save_trans(req: TransSavePayload):
         raise HTTPException(status_code=500, detail="Failed to save translation file")
     return {"success": True}
 
+# --- RUNNER ---
 if __name__ == "__main__":
     port = 8000
     if len(sys.argv) > 1:

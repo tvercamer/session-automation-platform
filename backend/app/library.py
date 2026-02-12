@@ -2,44 +2,40 @@ import os
 import re
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Set
 
 # --- CONFIGURATION ---
-KNOWN_LANGUAGES = {'NL', 'FR', 'DE', 'EN', 'ES'}
-KNOWN_INDUSTRIES = {'healthcare', 'finance', 'retail', 'manufacturing', 'technology'}
-
 # Folders to completely ignore in UI, Drag operations, and Translation scanning
-IGNORED_FOLDERS = {'screenshots', 'images', 'assets', '__pycache__', '.git', 'translations', 'config'}
+IGNORED_FOLDERS = {'screenshots', 'images', 'assets', '__pycache__', '.git', 'translations', 'config', 'node_modules'}
 IGNORED_EXTENSIONS = {'.json', '.png', '.jpg', '.jpeg', '.gif', '.tmp', '.log', '.xml', '.ini'}
 
-def _is_base_file(path: Path) -> bool:
+def _is_base_file(path: Path, ignored_terms: Set[str]) -> bool:
     """
     Returns True ONLY if the file is a 'Base' (Generic) version.
-    It rejects files with Language or Industry tags (e.g. 'report_NL.txt').
+    It rejects files with tags present in 'ignored_terms' (Languages or Industries).
     """
     # 1. Block System Files
     if path.name.startswith('.') or path.name in {'intro.pptx', 'outro.pptx', 'Thumbs.db'}:
         return False
 
-    # 2. Block Ignored Extensions (Double check)
+    # 2. Block Ignored Extensions
     if path.suffix.lower() in IGNORED_EXTENSIONS:
         return False
 
-    # 3. Check for Tags
+    # 3. Check for Tags (Dynamic)
     stem = path.stem.lower()
     # Split by delimiters: underscore, hyphen, space
     tokens = re.split(r'[_\-\s]', stem)
 
     for token in tokens:
-        if token.upper() in KNOWN_LANGUAGES: return False
-        if token in KNOWN_INDUSTRIES: return False
+        if token.upper() in ignored_terms: return False
+        if token.lower() in ignored_terms: return False
 
     return True
 
-def scan_directory(path: Path) -> List[dict]:
+def scan_directory(path: Path, ignored_terms: Set[str] = set()) -> List[dict]:
     """
-    Scans directory but HIDES specific versions (NL, Healthcare) AND technical folders.
-    Only generic files are returned to the UI.
+    Scans directory but HIDES specific versions based on dynamic settings.
     """
     nodes = []
 
@@ -55,102 +51,88 @@ def scan_directory(path: Path) -> List[dict]:
             if item.is_dir() and item.name.lower() in IGNORED_FOLDERS:
                 continue
 
-            # 2. FILTER FILES: Skip if it's a specific version (e.g. _NL)
+            # 2. FILTER FILES
             if not item.is_dir():
                 if item.name.startswith('.'): continue
-                # Explicitly hide translations.json from the file tree
                 if item.name == 'translations.json': continue
-                if not _is_base_file(item): continue
+                # Pass the dynamic list
+                if not _is_base_file(item, ignored_terms): continue
 
-            node = {
-                "key": str(item.resolve()),
-                "label": item.name,
-                "data": str(item.resolve()),
-            }
+            # Create Node Structure
+            node = _create_node_struct(item)
 
             if item.is_dir():
-                node["icon"] = "pi pi-fw pi-folder"
-                node["children"] = scan_directory(item)
-                # Optional: if not node["children"]: continue
+                # Recursive call needs to pass the terms down
+                children = scan_directory(item, ignored_terms)
+                # Optional: Only show folder if it has content (uncomment if desired)
+                # if children or _has_content(item):
+                node["children"] = children
                 nodes.append(node)
             else:
-                node = _create_node(item)
-                # Helper _create_node returns simple dict, we need tree format here
-                tree_node = {
-                    "key": str(item.resolve()),
-                    "label": item.name,
-                    "data": str(item.resolve()),
-                    "type": node["type"],
-                    "icon": f"pi pi-fw pi-file {node['type']}-icon" if node['type'] != 'file' else "pi pi-fw pi-file"
-                }
-                # Fix specific icons based on type
-                if node['type'] == 'pptx': tree_node['icon'] = "pi pi-fw pi-file text-orange-500"
-                elif node['type'] == 'docx': tree_node['icon'] = "pi pi-fw pi-file text-blue-500"
-                elif node['type'] == 'xlsx': tree_node['icon'] = "pi pi-fw pi-file-excel text-green-500"
-                elif node['type'] == 'pdf': tree_node['icon'] = "pi pi-fw pi-file-pdf text-red-500"
+                nodes.append(node)
 
-                nodes.append(tree_node)
     except PermissionError:
         pass
     return nodes
 
-def resolve_dropped_item(path_str: str) -> List[dict]:
-    """
-    Simple Resolver:
-    1. Folder -> All 'Base' files inside.
-    2. File -> The file itself + its 'Base' companion (Exercise <-> Solution).
-    """
-    path = Path(path_str)
-    if not path.exists():
-        return []
+def _create_node_struct(path: Path):
+    is_dir = path.is_dir()
+    node = {
+        "key": str(path.resolve()),
+        "label": path.name,
+        "data": str(path.resolve()),
+    }
 
+    if is_dir:
+        node["icon"] = "pi pi-fw pi-folder"
+    else:
+        info = _create_node(path)
+        node["type"] = info["type"]
+
+        # Specific Icons
+        if info['type'] == 'pptx': node['icon'] = "pi pi-fw pi-file text-orange-500"
+        elif info['type'] == 'docx': node['icon'] = "pi pi-fw pi-file text-blue-500"
+        elif info['type'] == 'xlsx': node['icon'] = "pi pi-fw pi-file-excel text-green-500"
+        elif info['type'] == 'pdf': node['icon'] = "pi pi-fw pi-file-pdf text-red-500"
+        else: node['icon'] = f"pi pi-fw pi-file"
+
+    return node
+
+# --- SMART DRAG & DROP ---
+
+def resolve_dropped_item(path_str: str, ignored_terms: Set[str] = set()) -> List[dict]:
+    path = Path(path_str)
+    if not path.exists(): return []
     results = []
 
     # --- CASE 1: FOLDER DRAG ---
     if path.is_dir():
         for root, dirs, files in os.walk(path):
-            # Block hidden/system folders from recursion
             dirs[:] = [d for d in dirs if d.lower() not in IGNORED_FOLDERS]
-
             for file in files:
                 file_path = Path(root) / file
-
-                # Use the same filter as the Library Tree
-                if _is_base_file(file_path):
-                    # Only content files
+                if _is_base_file(file_path, ignored_terms):
                     if file_path.suffix.lower() in ['.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls', '.pdf', '.txt']:
                         results.append(_create_node(file_path))
 
     # --- CASE 2: FILE DRAG ---
     else:
-        # Add the file itself
         results.append(_create_node(path))
-
-        # Look for companions (Exercise <-> Solution)
-        _find_companions_simple(path, results)
+        _find_companions_simple(path, results, ignored_terms)
 
     return results
 
-def _find_companions_simple(path: Path, results: List[dict]):
-    """
-    Finds sibling files that are exercise/solution pairs.
-    e.g. dragging 'exercise.xlsx' also pulls 'exercise_solution.xlsx'
-    """
+def _find_companions_simple(path: Path, results: List[dict], ignored_terms: Set[str]):
     parent = path.parent
     stem = path.stem.lower()
-
-    # Identify base name (strip 'solution')
     base_name = re.sub(r'[-_ ]?solution', '', stem)
 
     for sibling in parent.iterdir():
         if sibling == path or not sibling.is_file(): continue
-        if not _is_base_file(sibling): continue # Ignore NL/Healthcare versions
+        if not _is_base_file(sibling, ignored_terms): continue
 
         sib_stem = sibling.stem.lower()
-
-        # Check if sibling contains the base name AND 'solution'
         if base_name in sib_stem:
-            # Avoid adding duplicates
             if not any(r['path'] == str(sibling.resolve()) for r in results):
                 results.append(_create_node(sibling))
 
@@ -161,12 +143,7 @@ def _create_node(path: Path):
     elif ext in ['.docx', '.doc']: type_ = 'docx'
     elif ext in ['.xlsx', '.xls', '.csv']: type_ = 'xlsx'
     elif ext == '.pdf': type_ = 'pdf'
-
-    return {
-        "name": path.name,
-        "path": str(path.resolve()),
-        "type": type_
-    }
+    return { "name": path.name, "path": str(path.resolve()), "type": type_ }
 
 # ==========================================
 #      NEW: TRANSLATION MANAGEMENT
@@ -174,40 +151,51 @@ def _create_node(path: Path):
 
 def list_translatable_folders(library_root: str) -> List[dict]:
     """
-    Recursively finds ALL folders (Tools AND Topics) where a translation file could exist.
+    Finds folders exactly at Level 0 (Root), Level 1 (Tool), and Level 2 (Topic).
+    STRICTLY ignores anything deeper.
     """
     root_path = Path(library_root)
     if not root_path.exists(): return []
 
-    # 1. ROOT (Master)
-    items = [{
+    items = []
+
+    # 1. LEVEL 0: ROOT
+    items.append({
         "name": "Library Root (Master)",
         "path": str(root_path),
         "hasFile": (root_path / "translations.json").exists(),
-        "isRoot": True
-    }]
+        "isRoot": True,
+        "level": 0
+    })
 
-    # 2. RECURSIVE SCAN
-    for root, dirs, files in os.walk(root_path):
-        # Apply the exact same ignore rules as the rest of the app
-        dirs[:] = [d for d in dirs if d.lower() not in IGNORED_FOLDERS]
+    try:
+        # 2. LEVEL 1: TOOLS
+        # Use simple iterdir instead of walk to prevent deep scanning
+        tools = [x for x in root_path.iterdir() if x.is_dir() and x.name.lower() not in IGNORED_FOLDERS]
 
-        for d in dirs:
-            folder_path = Path(root) / d
-            try:
-                rel_path = folder_path.relative_to(root_path)
-                display_name = str(rel_path).replace(os.sep, ' > ')
-            except ValueError:
-                display_name = d
-
+        for tool in tools:
             items.append({
-                "name": display_name,
-                "path": str(folder_path),
-                "hasFile": (folder_path / "translations.json").exists(),
-                "isRoot": False
+                "name": tool.name,
+                "path": str(tool),
+                "hasFile": (tool / "translations.json").exists(),
+                "isRoot": False,
+                "level": 1
             })
 
-    items.sort(key=lambda x: (not x['isRoot'], x['name']))
+            # 3. LEVEL 2: TOPICS
+            topics = [t for t in tool.iterdir() if t.is_dir() and t.name.lower() not in IGNORED_FOLDERS]
+            for topic in topics:
+                items.append({
+                    "name": f"{tool.name} > {topic.name}",
+                    "path": str(topic),
+                    "hasFile": (topic / "translations.json").exists(),
+                    "isRoot": False,
+                    "level": 2
+                })
+                # We stop here. No deeper scanning.
+    except PermissionError:
+        pass
+
     return items
 
 def get_translations(folder_path: str) -> dict:

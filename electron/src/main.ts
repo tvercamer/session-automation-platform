@@ -145,6 +145,8 @@ app.whenReady().then(() => {
     });
 })
 
+// ---------- IPC HANDLERS ---------- \\
+
 ipcMain.on('app-quit', () => {
     app.quit();
 })
@@ -168,6 +170,7 @@ ipcMain.handle('dialog:openDirectory', async () => {
     }
 });
 
+// --- SETTINGS ---
 ipcMain.handle('settings:get', async () => {
     return await requestPython('GET', '/settings');
 });
@@ -176,10 +179,24 @@ ipcMain.handle('settings:save', async (event, data) => {
     return await requestPython('POST', '/settings', data);
 });
 
+// --- LIBRARY ---
 ipcMain.handle('library:get', async () => {
     return await requestPython('GET', '/library');
 });
 
 ipcMain.handle('library:resolve', async (event, args) => {
     return await requestPython('POST', '/library/resolve', args);
+});
+
+// --- TRANSLATIONS (NEW) ---
+ipcMain.handle('trans:folders', async (event, args) => {
+    return await requestPython('POST', '/library/translations/folders', args);
+});
+
+ipcMain.handle('trans:load', async (event, args) => {
+    return await requestPython('POST', '/library/translations/load', args);
+});
+
+ipcMain.handle('trans:save', async (event, args) => {
+    return await requestPython('POST', '/library/translations/save', args);
 });

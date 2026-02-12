@@ -45,6 +45,7 @@ app.add_middleware(
 class KeyLabel(BaseModel):
     code: str
     label: str
+    matches: List[str] = []
 
 class SettingsModel(BaseModel):
     library_path: str
@@ -189,9 +190,10 @@ def get_hubspot_companies():
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    # VRAAG NU OOK OM DE PROPERTY 'industry'
     params = {
-        "limit": 100, # Haal de eerste 100 op
-        "properties": "name",
+        "limit": 100,
+        "properties": "name,industry",
         "sort": "name"
     }
 
@@ -202,10 +204,16 @@ def get_hubspot_companies():
 
         companies = []
         for result in data.get("results", []):
-            name = result.get("properties", {}).get("name")
+            props = result.get("properties", {})
+            name = props.get("name")
+            industry = props.get("industry", "") # Haal de HubSpot industry op
+
             if name:
-                # We gebruiken het HubSpot ID als 'code'
-                companies.append({"name": name, "code": result.get("id")})
+                companies.append({
+                    "name": name,
+                    "code": result.get("id"),
+                    "industry": industry # Stuur mee naar frontend
+                })
 
         return companies
     except Exception as e:

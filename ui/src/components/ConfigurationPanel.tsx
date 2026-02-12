@@ -9,14 +9,17 @@ interface ConfigurationPanelProps {
     onChange: (field: keyof SessionSettings, value: any) => void;
 }
 
+// Interfaces must match session.ts
 interface KeyLabel {
     code: string;
     label: string;
+    matches?: string[];
 }
 
 interface Customer {
     name: string;
     code: string;
+    industry?: string;
 }
 
 const DEFAULT_LANG: KeyLabel = { code: 'EN', label: 'English' };
@@ -37,12 +40,11 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
 
         async function loadData() {
             try {
-                // 1. SETTINGS (Talen & Industrieën)
+                // 1. SETTINGS
                 const appSettings = await window.electronAPI.getSettings();
                 let langs: KeyLabel[] = appSettings.languages || [];
                 let inds: KeyLabel[] = appSettings.industries || [];
 
-                // Defaults enforcen
                 if (!langs.find(l => l.code === DEFAULT_LANG.code)) langs.unshift(DEFAULT_LANG);
                 if (!inds.find(i => i.code === DEFAULT_IND.code)) inds.unshift(DEFAULT_IND);
 
@@ -50,33 +52,28 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
                     setAvailableLanguages(langs);
                     setAvailableIndustries(inds);
 
-                    // Auto-select Defaults als leeg
+                    // Auto-select Defaults if empty
                     if (!language || !language.code) {
-                        const def = langs.find(l => l.code === 'EN') || langs[0];
-                        onChange('language', def);
+                        onChange('language', langs.find(l => l.code === 'EN') || langs[0]);
                     }
                     if (!industry || !industry.code) {
-                        const def = inds.find(i => i.code === 'gen') || inds[0];
-                        onChange('industry', def);
+                        onChange('industry', inds.find(i => i.code === 'gen') || inds[0]);
                     }
                 }
 
                 // 2. HUBSPOT CUSTOMERS
                 if (isMounted) setLoadingCustomers(true);
-                // Let op: zorg dat getHubspotCompanies bestaat in je electronAPI (zie eerdere stap)
-                // Als die nog niet bestaat, zal dit falen, dus we wrappen in try/catch blok specifiek
                 let companies: Customer[] = [];
                 try {
                     companies = await window.electronAPI.getHubspotCompanies();
                 } catch (err) {
-                    console.warn("HubSpot API call failed or not implemented yet", err);
+                    console.warn("HubSpot API call failed", err);
                 }
 
                 if (isMounted) {
                     if (companies && companies.length > 0) {
                         setAvailableCustomers(companies);
                     } else {
-                        // Fallback data
                         setAvailableCustomers([
                             { name: 'Acme Corp (Local)', code: 'ACME' },
                             { name: 'Globex (Local)', code: 'GLBX' }
@@ -96,9 +93,33 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // --- AUTO-MAPPING LOGIC ---
+    const handleCustomerChange = (newCustomer: Customer | null) => {
+        // 1. Always update the customer selection first
+        onChange('customer', newCustomer);
+
+        // 2. If no customer or no industry data, stop here
+        if (!newCustomer || !newCustomer.industry) return;
+
+        console.log(`Attempting to map HubSpot industry: "${newCustomer.industry}"`);
+
+        // 3. Find a match in our internal industry list
+        // We look for an industry where the 'matches' array contains the HubSpot value exactly.
+        const matchedIndustry = availableIndustries.find(ind =>
+            ind.matches && ind.matches.includes(newCustomer.industry!)
+        );
+
+        // 4. If found, update the industry dropdown automatically
+        if (matchedIndustry) {
+            console.log(`Found match! Setting industry to: ${matchedIndustry.label} (${matchedIndustry.code})`);
+            onChange('industry', matchedIndustry);
+        } else {
+            console.log("No mapping found for this industry.");
+        }
+    };
+
+
     // --- RENDER HELPERS ---
-    // Dit zoekt het juiste object in de lijst op basis van de code.
-    // Dit fixt het probleem dat dropdowns leeg lijken.
     const selectedLanguage = availableLanguages.find(l => l.code === language?.code) || language;
     const selectedIndustry = availableIndustries.find(i => i.code === industry?.code) || industry;
 
@@ -127,14 +148,23 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
                     <label className="text-xs font-medium text-gray-400">CUSTOMER</label>
                     <Dropdown
                         value={customer}
-                        onChange={(e) => onChange('customer', e.value)}
+                        // --- THE FIX IS HERE ---
+                        // We now call our custom handler instead of passing data directly to onChange
+                        onChange={(e) => handleCustomerChange(e.value)}
+                        // -----------------------
                         options={availableCustomers}
                         optionLabel="name"
-                        filter // Voegt zoekbalk toe
+                        filter
                         placeholder={loadingCustomers ? "Loading Companies..." : "Select a Customer"}
                         disabled={loadingCustomers}
                         className="p-inputtext-sm"
                         emptyMessage="No companies found"
+                        itemTemplate={(option) => (
+                            <div className="flex flex-column">
+                                <span>{option.name}</span>
+                                {option.industry && <span className="text-xs text-gray-400">{option.industry}</span>}
+                            </div>
+                        )}
                     />
                 </div>
 

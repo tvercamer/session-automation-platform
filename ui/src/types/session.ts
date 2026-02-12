@@ -15,11 +15,13 @@ export interface Section {
 export interface KeyLabel {
     code: string;
     label: string;
+    matches?: string[];
 }
 
 export interface Customer {
     name: string;
     code: string;
+    industry?: string;
 }
 
 export interface SessionSettings {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog } from 'primereact/dialog';
 import { Button } from 'primereact/button';
+import { Chips } from 'primereact/chips';
 import { TabView, TabPanel } from 'primereact/tabview';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
@@ -20,6 +21,7 @@ interface SettingsDialogProps {
 interface KeyLabel {
     code: string;
     label: string;
+    matches?: string[];
 }
 
 interface AppSettings {
@@ -192,6 +194,13 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
         saveSettings({ ...appSettings, industries: appSettings.industries.filter(i => i.code !== code) });
     };
 
+    const updateIndustryMatches = (code: string, newMatches: string[]) => {
+        const updatedInds = appSettings.industries.map(ind =>
+            ind.code === code ? { ...ind, matches: newMatches } : ind
+        );
+        saveSettings({ ...appSettings, industries: updatedInds });
+    };
+
     // Save Translation File
     const saveTranslationFile = async () => {
         if (!selectedFolder) return;
@@ -335,6 +344,15 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
                             <DataTable value={appSettings.industries} size="small" className="p-datatable-sm" rowClassName={(data) => isDefaultRow(data) ? 'bg-gray-50' : ''}>
                                 <Column field="code" header="Key" style={{width: '20%'}} body={(row) => <span className={row.code === 'gen' ? 'font-bold' : ''}>{row.code}</span>} />
                                 <Column field="label" header="Label" />
+                                <Column header="HubSpot Mappings" body={(row) => (
+                                    <Chips
+                                        value={row.matches || []}
+                                        onChange={(e) => updateIndustryMatches(row.code, e.value || [])}
+                                        className="p-inputtext-sm w-full"
+                                        placeholder={row.code === 'gen' ? "Fallback..." : "Map HubSpot industries..."}
+                                        disabled={row.code === 'gen'}
+                                    />
+                                )} />
                                 <Column body={(row) => (
                                     row.code !== DEFAULT_IND.code && (
                                         <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => removeIndustry(row.code)} />

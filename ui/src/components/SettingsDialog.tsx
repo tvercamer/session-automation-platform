@@ -42,6 +42,10 @@ interface TransRow {
     [langCode: string]: string;
 }
 
+// --- CONSTANTS ---
+const DEFAULT_LANG = { code: 'EN', label: 'English' };
+const DEFAULT_IND = { code: 'gen', label: 'Generic' };
+
 export default function SettingsDialog({ visible, onHide, onSettingsChanged }: SettingsDialogProps) {
     const toast = useRef<Toast>(null);
 
@@ -71,9 +75,20 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
 
     const loadGeneralSettings = async () => {
         try {
-            const settings = await window.electronAPI.getSettings();
+            let settings = await window.electronAPI.getSettings();
+
+            // 1. Enforce Default Language (EN)
             if (!settings.languages) settings.languages = [];
+            if (!settings.languages.find((l: KeyLabel) => l.code === DEFAULT_LANG.code)) {
+                settings.languages.unshift(DEFAULT_LANG);
+            }
+
+            // 2. Enforce Default Industry (gen)
             if (!settings.industries) settings.industries = [];
+            if (!settings.industries.find((i: KeyLabel) => i.code === DEFAULT_IND.code)) {
+                settings.industries.unshift(DEFAULT_IND);
+            }
+
             setAppSettings(settings);
 
             if (settings.library_path) {
@@ -100,7 +115,7 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
         try {
             const data = await window.electronAPI.loadTrans(targetPath);
             setFileData(data);
-            setCurrentView('Generic');
+            setCurrentView('Generic'); // Always reset to Generic (which maps to 'gen' internally if needed)
             parseRowsForView(data, 'Generic');
         } catch (e) {
             console.error(e);
@@ -114,15 +129,19 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
         Object.entries(data).forEach(([key, content]: [string, any], index) => {
             const row: TransRow = { id: `row-${index}-${Date.now()}`, key: key };
 
+            // View Logic: 'Generic' in UI maps to 'default' block or 'gen' industry
+            // But based on your structure:
+            // "default": { "EN": "Val", "NL": "Val" } -> This IS the "Generic" view
+            // "industries": { "healthcare": { ... } } -> This is the "healthcare" view
+
             if (view === 'Generic') {
                 const defaults = content.default || {};
                 appSettings.languages.forEach(lang => {
                     row[lang.code] = defaults[lang.code] || '';
                 });
             } else {
-                // View is an Industry Code (e.g. 'healthcare')
                 const industries = content.industries || {};
-                const indData = industries[view] || {}; // View here corresponds to Industry Key
+                const indData = industries[view] || {};
                 appSettings.languages.forEach(lang => {
                     row[lang.code] = indData[lang.code] || '';
                 });
@@ -149,22 +168,40 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
     // Language Manager
     const addLanguage = () => {
         if (!newLangCode || !newLangLabel) return;
-        const updated = { ...appSettings, languages: [...appSettings.languages, { code: newLangCode.toUpperCase(), label: newLangLabel }] };
+        const code = newLangCode.toUpperCase();
+
+        if (appSettings.languages.find(l => l.code === code)) {
+            toast.current?.show({severity:'error', summary:'Duplicate', detail:'Language code already exists.'});
+            return;
+        }
+
+        const updated = { ...appSettings, languages: [...appSettings.languages, { code, label: newLangLabel }] };
         saveSettings(updated);
         setNewLangCode(''); setNewLangLabel('');
     };
+
     const removeLanguage = (code: string) => {
+        if (code === DEFAULT_LANG.code) return; // Protection
         saveSettings({ ...appSettings, languages: appSettings.languages.filter(l => l.code !== code) });
     };
 
     // Industry Manager
     const addIndustry = () => {
         if (!newIndCode || !newIndLabel) return;
-        const updated = { ...appSettings, industries: [...appSettings.industries, { code: newIndCode.toLowerCase(), label: newIndLabel }] };
+        const code = newIndCode.toLowerCase();
+
+        if (appSettings.industries.find(i => i.code === code)) {
+            toast.current?.show({severity:'error', summary:'Duplicate', detail:'Industry key already exists.'});
+            return;
+        }
+
+        const updated = { ...appSettings, industries: [...appSettings.industries, { code, label: newIndLabel }] };
         saveSettings(updated);
         setNewIndCode(''); setNewIndLabel('');
     };
+
     const removeIndustry = (code: string) => {
+        if (code === DEFAULT_IND.code) return; // Protection
         saveSettings({ ...appSettings, industries: appSettings.industries.filter(i => i.code !== code) });
     };
 
@@ -207,11 +244,14 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
         </div>
     );
 
-    // View Options for Dropdown (Generic + User Defined Industries)
-    const viewOptions = [
-        { label: 'Generic (Default)', value: 'Generic' },
-        ...appSettings.industries.map(ind => ({ label: ind.label, value: ind.code }))
-    ];
+    // View Options: Map 'gen' to 'Generic' label in UI
+    const viewOptions = appSettings.industries.map(ind => ({
+        label: ind.code === 'gen' ? 'Generic (Default)' : ind.label,
+        value: ind.code === 'gen' ? 'Generic' : ind.code // Map 'gen' code to 'Generic' view ID used in logic
+    }));
+
+    // Row styling to dim default rows if needed (optional)
+    const isDefaultRow = (data: any) => data.code === DEFAULT_LANG.code || data.code === DEFAULT_IND.code;
 
     return (
         <Dialog header="Settings" visible={visible} style={{ width: '75vw', height: '90vh' }} onHide={onHide} contentClassName="flex flex-column">
@@ -250,25 +290,29 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
                         <div className="flex gap-2 align-items-end surface-ground p-3 border-round">
                             <div className="flex flex-column gap-1">
                                 <label className="text-sm">Code (e.g. NL)</label>
-                                <InputText value={newLangCode} onChange={(e) => setNewLangCode(e.target.value)} className="w-6rem" maxLength={2} placeholder="EN" />
+                                <InputText value={newLangCode} onChange={(e) => setNewLangCode(e.target.value)} className="w-6rem" maxLength={2} placeholder="NL" />
                             </div>
                             <div className="flex flex-column gap-1 flex-grow-1">
                                 <label className="text-sm">Label (e.g. Dutch)</label>
-                                <InputText value={newLangLabel} onChange={(e) => setNewLangLabel(e.target.value)} placeholder="English" />
+                                <InputText value={newLangLabel} onChange={(e) => setNewLangLabel(e.target.value)} placeholder="Nederlands" />
                             </div>
                             <Button label="Add" icon="pi pi-plus" onClick={addLanguage} disabled={!newLangCode || !newLangLabel} />
                         </div>
                         <div className="flex-grow-1 overflow-auto border-1 surface-border border-round">
-                            <DataTable value={appSettings.languages} size="small" className="p-datatable-sm" emptyMessage="No languages defined.">
-                                <Column field="code" header="Code" style={{width: '10%'}} />
+                            <DataTable value={appSettings.languages} size="small" className="p-datatable-sm" rowClassName={(data) => isDefaultRow(data) ? 'bg-gray-50' : ''}>
+                                <Column field="code" header="Code" style={{width: '10%'}} body={(row) => <span className={row.code === 'EN' ? 'font-bold' : ''}>{row.code}</span>} />
                                 <Column field="label" header="Label" />
-                                <Column body={(row) => <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => removeLanguage(row.code)} />} style={{width: '10%'}} />
+                                <Column body={(row) => (
+                                    row.code !== DEFAULT_LANG.code ? (
+                                        <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => removeLanguage(row.code)} />
+                                    ) : ''
+                                )} style={{width: '10%'}} />
                             </DataTable>
                         </div>
                     </div>
                 </TabPanel>
 
-                {/* 3. INDUSTRIES (NEW) */}
+                {/* 3. INDUSTRIES */}
                 <TabPanel header="Industries" leftIcon="pi pi-briefcase mr-2">
                     <div className="flex flex-column gap-4 p-2 h-full">
                         <div className="flex gap-2 align-items-end surface-ground p-3 border-round">
@@ -283,10 +327,14 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
                             <Button label="Add" icon="pi pi-plus" onClick={addIndustry} disabled={!newIndCode || !newIndLabel} />
                         </div>
                         <div className="flex-grow-1 overflow-auto border-1 surface-border border-round">
-                            <DataTable value={appSettings.industries} size="small" className="p-datatable-sm" emptyMessage="No industries defined.">
-                                <Column field="code" header="Key" style={{width: '20%'}} />
+                            <DataTable value={appSettings.industries} size="small" className="p-datatable-sm" rowClassName={(data) => isDefaultRow(data) ? 'bg-gray-50' : ''}>
+                                <Column field="code" header="Key" style={{width: '20%'}} body={(row) => <span className={row.code === 'gen' ? 'font-bold' : ''}>{row.code}</span>} />
                                 <Column field="label" header="Label" />
-                                <Column body={(row) => <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => removeIndustry(row.code)} />} style={{width: '10%'}} />
+                                <Column body={(row) => (
+                                    row.code !== DEFAULT_IND.code ? (
+                                        <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => removeIndustry(row.code)} />
+                                    ) : ''
+                                )} style={{width: '10%'}} />
                             </DataTable>
                         </div>
                     </div>
@@ -353,6 +401,7 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
                                 <Column body={(row) => <Button icon="pi pi-trash" className="p-button-rounded p-button-text p-button-danger p-button-sm" onClick={() => setRows(rows.filter(r => r.id !== row.id))} />} style={{ width: '50px' }} alignHeader={'center'} />
                             </DataTable>
                         </div>
+
                     </div>
                 </TabPanel>
             </TabView>

@@ -13,6 +13,12 @@ def _is_base_file(path: Path, ignored_terms: Set[str]) -> bool:
     """
     Returns True ONLY if the file is a 'Base' (Generic) version.
     It rejects files with tags present in 'ignored_terms' (Languages or Industries).
+
+    Example:
+    If ignored_terms = {'NL', 'healthcare'}
+    - report.docx -> True (Base / Default / EN_gen)
+    - report_NL.docx -> False (Specific)
+    - report_healthcare.docx -> False (Specific)
     """
     # 1. Block System Files
     if path.name.startswith('.') or path.name in {'intro.pptx', 'outro.pptx', 'Thumbs.db'}:
@@ -22,12 +28,12 @@ def _is_base_file(path: Path, ignored_terms: Set[str]) -> bool:
     if path.suffix.lower() in IGNORED_EXTENSIONS:
         return False
 
-    # 3. Check for Tags (Dynamic)
+    # 3. Check for Tags
     stem = path.stem.lower()
-    # Split by delimiters: underscore, hyphen, space
     tokens = re.split(r'[_\-\s]', stem)
 
     for token in tokens:
+        # If the token matches a known language or industry code, it's a specific version
         if token.upper() in ignored_terms: return False
         if token.lower() in ignored_terms: return False
 

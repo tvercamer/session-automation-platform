@@ -21,6 +21,9 @@ declare global {
             getTransFolders: (rootPath: string) => Promise<any[]>;
             loadTrans: (targetPath: string) => Promise<any>;
             saveTrans: (targetPath: string, entries: any) => Promise<any>;
+
+            // --- Integrations ---
+            getHubspotCompanies: () => Promise<any[]>;
         };
     }
 }

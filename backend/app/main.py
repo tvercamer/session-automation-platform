@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
 from typing import List, Dict, Any, Set
+import requests
 import uvicorn
 import json
 import sys
@@ -48,6 +49,7 @@ class KeyLabel(BaseModel):
 class SettingsModel(BaseModel):
     library_path: str
     output_path: str
+    hubspot_api_key: str = ""
     languages: List[KeyLabel] = []
     industries: List[KeyLabel] = []
 
@@ -165,6 +167,50 @@ def save_trans(req: TransSavePayload):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to save translation file")
     return {"success": True}
+
+# --- INTEGRATION ENDPOINTS ---
+@app.get("/hubspot/companies")
+def get_hubspot_companies():
+    """Haalt bedrijven op via de HubSpot API"""
+    if not SETTINGS_FILE.exists(): return []
+
+    api_key = ""
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            settings = json.load(f)
+            api_key = settings.get("hubspot_api_key", "")
+    except: return []
+
+    if not api_key:
+        return []
+
+    url = "https://api.hubapi.com/crm/v3/objects/companies"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    params = {
+        "limit": 100, # Haal de eerste 100 op
+        "properties": "name",
+        "sort": "name"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        companies = []
+        for result in data.get("results", []):
+            name = result.get("properties", {}).get("name")
+            if name:
+                # We gebruiken het HubSpot ID als 'code'
+                companies.append({"name": name, "code": result.get("id")})
+
+        return companies
+    except Exception as e:
+        print(f"HubSpot API Error: {e}")
+        return []
 
 # --- RUNNER ---
 if __name__ == "__main__":

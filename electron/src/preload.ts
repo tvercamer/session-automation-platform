@@ -15,8 +15,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLibrary: () => ipcRenderer.invoke('library:get'),
     resolveDrop: (path: string) => ipcRenderer.invoke('library:resolve', { path }),
 
-    // --- TRANSLATIONS (NEW) ---
+    // --- TRANSLATIONS ---
     getTransFolders: (rootPath: string) => ipcRenderer.invoke('trans:folders', { rootPath }),
     loadTrans: (targetPath: string) => ipcRenderer.invoke('trans:load', { targetPath }),
     saveTrans: (targetPath: string, entries: any) => ipcRenderer.invoke('trans:save', { targetPath, entries }),
+
+    // --- INTEGRATIONS ---
+    getHubspotCompanies: () => ipcRenderer.invoke('hubspot:companies'),
+
 });

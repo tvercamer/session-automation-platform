@@ -188,7 +188,7 @@ ipcMain.handle('library:resolve', async (event, args) => {
     return await requestPython('POST', '/library/resolve', args);
 });
 
-// --- TRANSLATIONS (NEW) ---
+// --- TRANSLATIONS ---
 ipcMain.handle('trans:folders', async (event, args) => {
     return await requestPython('POST', '/library/translations/folders', args);
 });
@@ -199,4 +199,9 @@ ipcMain.handle('trans:load', async (event, args) => {
 
 ipcMain.handle('trans:save', async (event, args) => {
     return await requestPython('POST', '/library/translations/save', args);
+});
+
+// --- INTEGRATIONS ---
+ipcMain.handle('hubspot:companies', async () => {
+    return await requestPython('GET', '/hubspot/companies');
 });

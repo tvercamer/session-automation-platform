@@ -11,31 +11,27 @@ IGNORED_EXTENSIONS = {'.json', '.png', '.jpg', '.jpeg', '.gif', '.tmp', '.log', 
 
 def _is_base_file(path: Path, ignored_terms: Set[str]) -> bool:
     """
-    Returns True ONLY if the file is a 'Base' (Generic) version.
-    It rejects files with tags present in 'ignored_terms' (Languages or Industries).
-
-    Example:
-    If ignored_terms = {'NL', 'healthcare'}
-    - report.docx -> True (Base / Default / EN_gen)
-    - report_NL.docx -> False (Specific)
-    - report_healthcare.docx -> False (Specific)
+    Returns True ONLY if the file is a clean 'Base' version.
     """
-    # 1. Block System Files
-    if path.name.startswith('.') or path.name in {'intro.pptx', 'outro.pptx', 'Thumbs.db'}:
+    # 1. Systeembestanden en verborgen bestanden blokkeren
+    if path.name.startswith('.') or path.name.lower() in {'thumbs.db', 'desktop.ini'}:
         return False
 
-    # 2. Block Ignored Extensions
+    # 2. Extensies controleren uit de configuratie
     if path.suffix.lower() in IGNORED_EXTENSIONS:
         return False
 
-    # 3. Check for Tags
-    stem = path.stem.lower()
-    tokens = re.split(r'[_\-\s]', stem)
+    # 3. SPECIFIEKE UITZONDERINGEN: Verberg de vaste Intro en Outro
+    # Deze worden door de UI op vaste plekken afgehandeld.
+    forbidden_names = {'intro.pptx', 'outro.pptx'}
+    if path.name.lower() in forbidden_names:
+        return False
 
-    for token in tokens:
-        # If the token matches a known language or industry code, it's a specific version
-        if token.upper() in ignored_terms: return False
-        if token.lower() in ignored_terms: return False
+    # 4. VARIANT FILTERING:
+    # We verbergen alles wat een underscore bevat, omdat dit duidt op
+    # een taal- (_NL) of industrie-variant (_healthcare).
+    if "_" in path.stem:
+        return False
 
     return True
 

@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 from pptx import Presentation
+from pptx.util import Emu # Nodig voor berekeningen
 
 # --- IMPORTS FROM LIBRARY.PY ---
 from library import (
@@ -130,147 +131,197 @@ def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> Li
 
     return found_files
 
-# --- TRANSLATION LOGIC (AANGEPAST AAN JOUW STRUCTUUR) ---
+# --- IMAGE LOGIC (NIEUW) ---
+
+def find_screenshot(topic_folder: Path, shape_name: str, lang: str, ind: str) -> Optional[Path]:
+    """
+    Zoekt in de 'screenshots' subfolder naar een afbeelding die matcht met de shape_name.
+    """
+    screenshots_dir = topic_folder / "screenshots"
+    if not screenshots_dir.exists():
+        return None
+
+    # Extensies die we ondersteunen
+    extensions = ['.png', '.jpg', '.jpeg']
+
+    # Mogelijke bestandsnamen (zonder extensie)
+    candidates = [
+        f"{shape_name}_{lang}_{ind}",
+        f"{shape_name}_{ind}_{lang}",
+        f"{shape_name}_{lang}",
+        f"{shape_name}_{ind}",
+        shape_name
+    ]
+
+    # We itereren door de bestanden in de screenshots map
+    # Dit is efficiënter dan os.walk omdat het maar 1 map is
+    try:
+        files = os.listdir(screenshots_dir)
+        for cand in candidates:
+            for ext in extensions:
+                target = f"{cand}{ext}"
+                # Case-insensitive check voor bestandsnamen
+                for f in files:
+                    if f.lower() == target.lower():
+                        return screenshots_dir / f
+    except:
+        return None
+
+    return None
+
+def replace_image_with_fit(slide, shape, image_path: Path):
+    """
+    Vervangt 'shape' door de image op 'image_path'.
+    Behoudt aspect ratio en centreert in de originele box.
+    """
+    try:
+        # 1. Oude dimensies opslaan
+        old_left = shape.left
+        old_top = shape.top
+        old_width = shape.width
+        old_height = shape.height
+
+        # 2. Nieuwe afbeelding invoegen (native size)
+        new_pic = slide.shapes.add_picture(str(image_path), 0, 0)
+
+        # 3. Bereken aspect ratios
+        # Emu is de interne unit van PowerPoint
+        native_width = new_pic.width
+        native_height = new_pic.height
+
+        if native_width == 0 or native_height == 0: return # Safety check
+
+        aspect_ratio_img = native_width / native_height
+        aspect_ratio_box = old_width / old_height
+
+        new_width = 0
+        new_height = 0
+
+        # 4. Bereken nieuwe dimensies (Best Fit / Contain)
+        if aspect_ratio_img > aspect_ratio_box:
+            # Afbeelding is breder dan de box -> Fit op breedte
+            new_width = old_width
+            new_height = int(old_width / aspect_ratio_img)
+        else:
+            # Afbeelding is hoger dan de box -> Fit op hoogte
+            new_height = old_height
+            new_width = int(old_height * aspect_ratio_img)
+
+        # 5. Bereken centrering
+        offset_x = (old_width - new_width) // 2
+        offset_y = (old_height - new_height) // 2
+
+        new_left = old_left + offset_x
+        new_top = old_top + offset_y
+
+        # 6. Pas positie en grootte toe
+        new_pic.left = new_left
+        new_pic.top = new_top
+        new_pic.width = new_width
+        new_pic.height = new_height
+
+        # 7. Verwijder oude shape
+        # In python-pptx is verwijderen van shapes tricky, we verwijderen het element uit de XML tree
+        sp = shape.element
+        sp.getparent().remove(sp)
+
+        return True
+    except Exception as e:
+        print(f"ERROR replacing image: {e}")
+        return False
+
+# --- TRANSLATION LOGIC (UNCHANGED) ---
 
 def load_json_safely(path: Path) -> Dict:
-    if not path.exists():
-        return {}
+    if not path.exists(): return {}
     try:
         with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            # print(f"DEBUG: JSON loaded from {path.name}")
-            return data
+            return json.load(f)
     except Exception as e:
         print(f"ERROR: Corrupte JSON in {path}: {e}")
         return {}
 
 def flatten_translation(data: Dict, lang: str, industry: str) -> Dict[str, str]:
-    """
-    Verwerkt JSON structuur: Key -> Default/Industries -> Taal
-    """
     result = {}
-
-    # Normaliseer inputs (bv 'nl' -> 'NL')
     target_lang = lang.upper().strip()
     target_ind = industry.lower().strip()
 
-    # Loop door elke translation key (bv "HelloWorld", "welcome")
     for key, content in data.items():
-        if not isinstance(content, dict):
-            continue # Skip foute structuren
+        if not isinstance(content, dict): continue
 
         value_found = None
-
-        # STAP 1: Check Specifieke Industrie
         if 'industries' in content and isinstance(content['industries'], dict):
-            # Zoek case-insensitive naar industry key
             ind_block = None
             for k, v in content['industries'].items():
                 if k.lower() == target_ind:
                     ind_block = v
                     break
-
             if ind_block:
-                # Probeer de taal in deze industry block
-                # We checken case-insensitive op keys (NL, nl, En, EN)
                 for l_key, l_val in ind_block.items():
                     if l_key.upper() == target_lang:
                         value_found = l_val
                         break
-
-                # Fallback naar EN binnen industry als NL niet bestaat
                 if not value_found:
                     for l_key, l_val in ind_block.items():
                         if l_key.upper() == 'EN':
                             value_found = l_val
                             break
 
-        # STAP 2: Check Default (als nog niks gevonden in industry)
         if not value_found and 'default' in content:
             def_block = content['default']
-
-            # Probeer target taal
             for l_key, l_val in def_block.items():
                 if l_key.upper() == target_lang:
                     value_found = l_val
                     break
-
-            # Fallback naar EN
             if not value_found:
                 for l_key, l_val in def_block.items():
                     if l_key.upper() == 'EN':
                         value_found = l_val
                         break
 
-        # STAP 3: Opslaan
         if value_found:
             result[key] = value_found
-            # print(f"DEBUG: Key '{key}' vertaald naar: '{value_found}'")
-        else:
-            # print(f"DEBUG: Geen vertaling gevonden voor '{key}' (Lang: {target_lang}, Ind: {target_ind})")
-            pass
 
     return result
 
 def get_file_context(library_root: Path, file_path: Path, lang: str, ind: str, base_vars: Dict) -> Dict[str, str]:
-    """
-    Bouwt de dictionary op: Root JSON -> Local JSON -> System Vars.
-    """
     context = {}
-
-    # 1. Global Translations (Library Root)
     global_trans_path = library_root / "translations.json"
     if global_trans_path.exists():
         raw_global = load_json_safely(global_trans_path)
-        flat_global = flatten_translation(raw_global, lang, ind)
-        context.update(flat_global)
+        context.update(flatten_translation(raw_global, lang, ind))
 
-    # 2. Local Translations (File folder)
     local_trans_path = file_path.parent / "translations.json"
     if local_trans_path.exists():
         raw_local = load_json_safely(local_trans_path)
         if raw_local:
-            flat_local = flatten_translation(raw_local, lang, ind)
-            context.update(flat_local)
+            context.update(flatten_translation(raw_local, lang, ind))
 
-    # 3. System Variables (Overrides alles)
     context.update(base_vars)
-
     return context
 
 def apply_replacements(text_frame, context: Dict[str, str]):
-    if not text_frame or not text_frame.text:
-        return
-
+    if not text_frame or not text_frame.text: return
     text = text_frame.text
-    # Regex: [% key %] (met dash support)
     pattern = re.compile(r'\[%\s*([\w\-]+)\s*%\]')
-
     matches = pattern.findall(text)
-    if not matches:
-        return
+    if not matches: return
 
     new_text = text
     replaced = False
     for key in matches:
-        # Zoek case-insensitive in de context
         val = None
-        if key in context:
-            val = context[key]
-        elif key.lower() in context:
-            val = context[key.lower()]
+        if key in context: val = context[key]
+        elif key.lower() in context: val = context[key.lower()]
 
         if val is not None:
-            # Case-insensitive replace van de tag
             key_pattern = re.compile(r'\[%\s*' + re.escape(key) + r'\s*%\]', re.IGNORECASE)
             new_text = key_pattern.sub(str(val), new_text)
             replaced = True
 
     if replaced:
-        try:
-            text_frame.text = new_text
-        except:
-            pass
+        try: text_frame.text = new_text
+        except: pass
 
 # --- ENDPOINTS ---
 
@@ -330,7 +381,6 @@ async def generate_session(req: GenerateRequest):
             lib_path = Path(settings.get("library_path", ""))
             out_root = Path(settings.get("output_path", ""))
 
-        # 1. Setup Folders
         folder_name = f"{req.date}_{req.customer_name}_{req.session_name}".replace(" ", "_")
         target_dir = out_root / folder_name
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -339,7 +389,6 @@ async def generate_session(req: GenerateRequest):
 
         print(f"INFO: Start generatie voor {req.customer_name}")
 
-        # System vars
         system_vars = {
             "customer_name": req.customer_name,
             "customer": req.customer_name,
@@ -392,41 +441,45 @@ async def generate_session(req: GenerateRequest):
 
         # --- MERGEN EN VERVANGEN ---
         if pptx_merge_list:
-            print(f"INFO: Mergen van {len(pptx_merge_list)} files met placeholders...")
+            print(f"INFO: Mergen van {len(pptx_merge_list)} files...")
 
             master_path = pptx_merge_list[0]
-            # Context voor Master laden
             master_context = get_file_context(lib_path, master_path, req.language_code, req.industry_code, system_vars)
 
             prs = Presentation(master_path)
 
-            # 1. Master Slides updaten
+            # --- PROCESS MASTER SLIDES (TEXT & IMAGES) ---
+            # De master/intro heeft (meestal) geen screenshots subfolder, maar we checken het voor de volledigheid
             for slide in prs.slides:
+                # 1. Text replacement
                 for shape in slide.shapes:
                     if shape.has_text_frame:
                         apply_replacements(shape.text_frame, master_context)
 
-            # 2. Append rest
+                    # 2. Image replacement (Check in intro folder)
+                    # We gebruiken shape.name als key
+                    if find_screenshot(master_path.parent, shape.name, req.language_code, req.industry_code):
+                        img_path = find_screenshot(master_path.parent, shape.name, req.language_code, req.industry_code)
+                        if img_path:
+                            replace_image_with_fit(slide, shape, img_path)
+
+            # --- PROCESS SUB SLIDES ---
             for i in range(1, len(pptx_merge_list)):
                 sub_path = pptx_merge_list[i]
-
-                # Context voor Sub file laden
                 file_context = get_file_context(lib_path, sub_path, req.language_code, req.industry_code, system_vars)
 
                 try:
                     sub_prs = Presentation(sub_path)
                     for slide in sub_prs.slides:
-                        # Layout match
                         layout_idx = sub_prs.slide_layouts.index(slide.slide_layout)
-                        try:
-                            slide_layout = prs.slide_layouts[layout_idx]
-                        except:
-                            slide_layout = prs.slide_layouts[0]
+                        try: slide_layout = prs.slide_layouts[layout_idx]
+                        except: slide_layout = prs.slide_layouts[0]
 
                         new_slide = prs.slides.add_slide(slide_layout)
 
+                        # Shapes kopiëren en bewerken
                         for shape in slide.shapes:
-                            # 1. Placeholders
+                            # A. Placeholders
                             if shape.is_placeholder:
                                 try:
                                     ph_idx = shape.placeholder_format.idx
@@ -436,14 +489,33 @@ async def generate_session(req: GenerateRequest):
                                         apply_replacements(new_ph.text_frame, file_context)
                                 except KeyError: pass
 
-                            # 2. Losse Shapes
+                            # B. Normale Shapes
                             else:
-                                if shape.has_text_frame:
+                                # B1. Check eerst op Images Replacement!
+                                # Kijk of er een screenshot is die matcht met de naam van deze shape
+                                img_match = find_screenshot(sub_path.parent, shape.name, req.language_code, req.industry_code)
+
+                                if img_match:
+                                    # Kopieer de placeholder shape naar de nieuwe slide (tijdelijk)
+                                    # We voegen een lege box toe met dezelfde afmetingen om te vervangen
+                                    placeholder_pic = new_slide.shapes.add_picture(str(img_match), shape.left, shape.top, shape.width, shape.height)
+                                    # De functie replace_image_with_fit verwacht een bestaande shape om te vervangen
+                                    # Maar add_picture voegt hem al toe.
+                                    # CORRECTIE: We gebruiken onze logica om aspect ratio te fixen direct hier.
+                                    replace_image_with_fit(new_slide, placeholder_pic, img_match)
+
+                                # B2. Tekstvakken
+                                elif shape.has_text_frame:
                                     new_shape = new_slide.shapes.add_textbox(
                                         shape.left, shape.top, shape.width, shape.height
                                     )
                                     new_shape.text = shape.text
                                     apply_replacements(new_shape.text_frame, file_context)
+
+                                # B3. Bestaande Afbeeldingen (die GEEN screenshot replacement zijn)
+                                # python-pptx kopieert afbeeldingen niet makkelijk uit zichzelf.
+                                # Als de shape.name NIET matcht met een screenshot file, wordt hij momenteel genegeerd.
+                                # Dit is "Expected Behavior" volgens ons eerdere gesprek (geen deep copy).
 
                 except Exception as e:
                     print(f"ERROR processing {sub_path.name}: {e}")

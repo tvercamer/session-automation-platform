@@ -107,6 +107,7 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
     // --- GENERATE HANDLER ---
     const handleGenerate = async () => {
+        // 1. Validatie
         if (!settings.customer || !settings.language || !settings.industry) {
             toast.current?.show({
                 severity: 'warn',
@@ -117,7 +118,33 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
         }
 
         setGenerating(true);
-        setLastGeneratedPath(null); // Reset path bij nieuwe poging
+        setLastGeneratedPath(null); // Resetten voor nieuwe run
+
+        // --- SAFE DATA EXTRACTION ---
+        const getCustomerName = (c: any) => {
+            if (!c) return "Onbekende Klant";
+            if (typeof c === 'string') return c;
+            return c.name || "Onbekende Klant";
+        };
+
+        const getIndustryLabel = (i: any) => {
+            if (!i) return "Generic";
+            if (typeof i === 'string') return i;
+            return i.label || i.name || "Generic";
+        };
+
+        const getIndustryCode = (i: any) => {
+            if (!i) return "gen";
+            if (typeof i === 'string') return i.toLowerCase();
+            return i.code || "gen";
+        };
+
+        const getLanguageCode = (l: any) => {
+            if (!l) return "EN";
+            if (typeof l === 'string') return l;
+            return l.code || "EN";
+        };
+        // ---------------------------
 
         const sectionsPayload = visibleSections.map(sec => ({
             title: sec.title,
@@ -128,17 +155,20 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
             const result = await window.electronAPI.generateSession({
                 session_name: settings.sessionName || 'Sessie',
                 date: settings.date ? settings.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                customer_name: typeof settings.customer === 'string' ? settings.customer : settings.customer.name,
-                customer_industry: typeof settings.industry === 'string' ? settings.industry : settings.industry.label,
-                industry_code: typeof settings.industry === 'string' ? settings.industry : settings.industry.code,
-                language_code: typeof settings.language === 'string' ? settings.language : settings.language.code,
+                customer_name: getCustomerName(settings.customer),
+                customer_industry: getIndustryLabel(settings.industry),
+                industry_code: getIndustryCode(settings.industry),
+                language_code: getLanguageCode(settings.language),
                 sections: sectionsPayload
             });
 
-            // Als succesvol, sla het pad op zodat de knop enabled wordt
-            if (result && result.status === 'success' && result.target_dir) {
+            // --- DE FIX: Zorg dat we het resultaat opslaan ---
+            if (result && result.status === 'success') {
+                console.log("Generatie succesvol, pad:", result.target_dir);
                 setLastGeneratedPath(result.target_dir);
                 toast.current?.show({ severity: 'success', summary: 'Klaar!', detail: 'Sessie gegenereerd.' });
+            } else {
+                toast.current?.show({ severity: 'error', summary: 'Fout', detail: 'Geen pad ontvangen van backend.' });
             }
 
         } catch (err) {

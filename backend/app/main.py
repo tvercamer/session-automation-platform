@@ -10,7 +10,7 @@ import sys
 import os
 import re
 import shutil
-from pptx import Presentation # Zorg dat je 'pip install python-pptx' hebt gedaan
+from pptx import Presentation # pip install python-pptx
 
 # --- IMPORTS FROM LIBRARY.PY ---
 from library import (
@@ -99,9 +99,6 @@ def get_ignored_terms() -> Set[str]:
         return set()
 
 def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> List[Path]:
-    """
-    Zoekt de beste match (en optioneel solution, hoewel dat voor slides hier minder relevant is).
-    """
     base_topic = Path(topic).stem
     found_files = []
 
@@ -127,63 +124,12 @@ def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> Li
 
     if best_file:
         found_files.append(best_file)
-        # Solution check (voornamelijk voor exercises)
         solution_name = f"{best_file.stem}_solution{best_file.suffix}"
         solution_path = best_file.parent / solution_name
         if solution_path.exists():
             found_files.append(solution_path)
 
     return found_files
-
-# --- PPTX MERGE HELPER ---
-def append_slides(target_pres, source_path: Path):
-    """
-    Kopieert slides van source naar target.
-    Dit is een basis implementatie. Complexe charts/animaties kunnen verloren gaan,
-    maar voor standaard template-based slides werkt dit prima.
-    """
-    try:
-        source_pres = Presentation(source_path)
-        for slide in source_pres.slides:
-            # We maken een 'blank' slide aan in de target met de layout van de source
-            # Aanname: Beide decks gebruiken dezelfde template structuur (indices matchen)
-            # Fallback: Gebruik de laatste layout als index niet bestaat
-            try:
-                slide_layout = target_pres.slide_layouts[target_pres.slide_layouts.index(slide.slide_layout)]
-            except:
-                slide_layout = target_pres.slide_layouts[-1] # Fallback to generic
-
-            new_slide = target_pres.slides.add_slide(slide_layout)
-
-            # Kopieer shapes (Tekst, Afbeeldingen, etc.)
-            for shape in slide.shapes:
-                # Dit is complex in python-pptx. Voor nu kopiëren we text en basis elementen.
-                # Voor een 100% clone is diepe XML manipulatie nodig, wat buiten scope is
-                # tenzij we specifieke libraries gebruiken.
-                # Hieronder een simpele tekst/titel copy strategie.
-                pass
-                # Noot: python-pptx heeft geen 'copy_shape'.
-                # Omdat de user aangeeft dat de templates identiek zijn,
-                # focussen we op het *samenvoegen van de files*.
-                # ECHTER: De beste manier zonder dataverlies is XML stitching.
-                # Omdat dat te complex is voor dit script, gebruiken we de 'Presentation' loop
-                # in generate_session om gewoon de bestanden te verzamelen,
-                # maar voor het ECHTE mergen zou je eigenlijk Aspose of een CLI tool willen.
-
-                # REVISIE: Om de user niet teleur te stellen met lege slides:
-                # We gaan ervan uit dat de user de bestanden fysiek wil hebben,
-                # en we doen een 'best effort' merge.
-
-    except Exception as e:
-        print(f"WARN: Kon slides van {source_path.name} niet mergen: {e}")
-
-# Om het simpel te houden voor NU (zonder buggy slide-copy code):
-# We bouwen een lijst op van alle PPTX bestanden die gemerged moeten worden.
-# Het daadwerkelijk mergen van PPTX in Python zonder dataverlies is erg lastig.
-# We gaan hieronder een 'Best Effort' doen door de Slides te kopiëren via XML als dat kan,
-# of anders (veiliger) gewoon de lijst opbouwen.
-
-# Laten we voor deze iteratie focussen op het verzamelen van de juiste bestanden.
 
 # --- ENDPOINTS ---
 
@@ -232,27 +178,6 @@ def resolve_drop(req: ResolveRequest):
     ignored = get_ignored_terms()
     return resolve_dropped_item(req.path, ignored)
 
-# --- MERGE LOGICA (SIMPLIFIED & ROBUST) ---
-def merge_pptx_files(master_path: Path, slide_files: List[Path], output_path: Path):
-    """
-    Opent de master (intro) en voegt content van andere files toe.
-    LET OP: Echte 'Deep Copy' in python-pptx is experimenteel.
-    Deze functie probeert de slides over te zetten.
-    """
-    if not master_path.exists():
-        print("ERROR: Master/Intro file niet gevonden.")
-        return
-
-    # Omdat python-pptx geen native 'merge' heeft die layout behoudt,
-    # gebruiken we een slimme truc: We openen de master, en gebruiken
-    # 'pres.slides.add_slide' is lastig.
-
-    # EERLIJKE OPLOSSING:
-    # Voor nu kopiëren we gewoon ALLE pptx bestanden naar de map zodat de user ze heeft.
-    # Een perfecte merge script in 1 bestand is complex zonder externe tools.
-    # Maar ik zal de infrastructuur opzetten.
-    pass
-
 @app.post("/session/generate")
 async def generate_session(req: GenerateRequest):
     if not SETTINGS_FILE.exists():
@@ -264,7 +189,7 @@ async def generate_session(req: GenerateRequest):
             lib_path = Path(settings.get("library_path", ""))
             out_root = Path(settings.get("output_path", ""))
 
-        # 1. Mappenstructuur
+        # 1. Mappenstructuur aanmaken
         folder_name = f"{req.date}_{req.customer_name}_{req.session_name}".replace(" ", "_")
         target_dir = out_root / folder_name
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -275,44 +200,31 @@ async def generate_session(req: GenerateRequest):
         print(f"INFO: Start generatie voor {req.customer_name}")
 
         files_copied = 0
-
-        # Lijst bijhouden voor de uiteindelijke merge
         pptx_merge_list = []
 
-        # A. INTRO TOEVOEGEN (Zoek intro in library)
-        # We gebruiken de find logic met 'en' of 'gen' als fallback als er geen specifieke intro is
+        # A. INTRO (Zoeken en toevoegen aan merge lijst)
         intro_matches = find_best_matches(lib_path, "Intro", req.language_code, req.industry_code)
         if intro_matches:
-            # We nemen de eerste match als intro
             pptx_merge_list.append(intro_matches[0])
             print(f"INFO: Intro gevonden: {intro_matches[0].name}")
-        else:
-            print("WARN: Geen Intro.pptx gevonden.")
 
         # B. SECTIES VERWERKEN
         for section in req.sections:
             for topic in section.topics:
                 matches = find_best_matches(lib_path, topic, req.language_code, req.industry_code)
-                if not matches:
-                    print(f"WARN: Niets gevonden voor '{topic}'")
-                    continue
 
                 for file_path in matches:
-                    # 1. Als het een PPTX is -> Op de stapel voor merge
+                    # SITUATIE 1: PowerPoint -> Toevoegen aan merge lijst (niet kopiëren naar map)
                     if file_path.suffix.lower() == '.pptx':
                         pptx_merge_list.append(file_path)
 
-                    # 2. ALLE bestanden (ook pptx) kopiëren we naar exercises/root voor de zekerheid
-                    #    of alleen de non-pptx naar exercises?
-                    #    Jouw request: "exercises folder maken... hierin exercise files... prefixen"
-
-                    if file_path.suffix.lower() != '.pptx':
-                        # Dit is een exercise file (.xlsx, .txt, etc)
+                    # SITUATIE 2: Oefenbestanden (xlsx, pdf, etc) -> Kopiëren naar exercises map
+                    else:
                         dest_folder = exercises_dir
                         final_name = file_path.name
                         dest_path = dest_folder / final_name
 
-                        # Collision logic
+                        # Collision Logic: Als bestand bestaat, prefix met sectie naam
                         if dest_path.exists():
                             safe_title = section.title.replace("/", "-").replace("\\", "-")
                             final_name = f"{safe_title} - {file_path.name}"
@@ -324,65 +236,64 @@ async def generate_session(req: GenerateRequest):
                                 dest_path = dest_folder / final_name
                                 counter += 1
 
-                        shutil.copy2(file_path, dest_path)
-                        files_copied += 1
+                        try:
+                            shutil.copy2(file_path, dest_path)
+                            files_copied += 1
+                        except Exception as e:
+                            print(f"ERROR copying {file_path.name}: {e}")
 
-        # C. OUTRO TOEVOEGEN
+        # C. OUTRO
         outro_matches = find_best_matches(lib_path, "Outro", req.language_code, req.industry_code)
         if outro_matches:
             pptx_merge_list.append(outro_matches[0])
             print(f"INFO: Outro gevonden: {outro_matches[0].name}")
 
-        # D. DE MERGE UITVOEREN (Via python-pptx library hack)
-        # We maken 1 master file op basis van de eerste in de lijst (Intro)
+        # D. DE SLIMME MERGE UITVOEREN
         if pptx_merge_list:
             print(f"INFO: Starten met samenvoegen van {len(pptx_merge_list)} presentaties...")
 
-            # 1. Open de eerste presentatie als BASIS
+            # 1. Open de Master (Intro)
             master_path = pptx_merge_list[0]
             prs = Presentation(master_path)
 
-            # 2. Loop door de rest (vanaf index 1)
+            # 2. Loop door de andere presentaties
             for i in range(1, len(pptx_merge_list)):
                 sub_path = pptx_merge_list[i]
                 try:
                     sub_prs = Presentation(sub_path)
-                    # Loop door alle slides in de sub-presentatie
+
                     for slide in sub_prs.slides:
-                        # TRICK: We kopiëren de layout en voegen een slide toe
-                        # Dit is de enige veilige manier in python-pptx zonder corruptie
-                        # Echter, content kopiëren is lastig.
-                        # Voor nu voegen we slides toe als placeholder als bewijs van concept.
-
-                        # Een betere methode voor productie is 'slide copying' via XML,
-                        # maar dat is 100 regels complexe code.
-                        # Voor nu gebruiken we een simpele slide copy methode als placeholder.
-
-                        slide_layout = prs.slide_layouts[0] # Default layout om crash te voorkomen
-                        # Probeer de juiste layout te vinden op basis van index
+                        # Zoek bijpassende layout in master
+                        layout_idx = sub_prs.slide_layouts.index(slide.slide_layout)
                         try:
-                            # Zoek index van layout in bron
-                            idx = sub_prs.slide_layouts.index(slide.slide_layout)
-                            if idx < len(prs.slide_layouts):
-                                slide_layout = prs.slide_layouts[idx]
+                            slide_layout = prs.slide_layouts[layout_idx]
                         except:
-                            pass
+                            slide_layout = prs.slide_layouts[0] # Fallback
 
                         # Maak nieuwe slide
                         new_slide = prs.slides.add_slide(slide_layout)
 
-                        # KOPIEER SHAPES (Simpel)
+                        # KOPIEER INHOUD (Met Placeholder Fix)
                         for shape in slide.shapes:
-                            if shape.has_text_frame:
-                                # Clone text formatting is hard, just copy text
+                            # 1. Is het een Placeholder (bv. Titel)? Vul de bestaande in!
+                            if shape.is_placeholder:
                                 try:
-                                    txBox = new_slide.shapes.add_textbox(shape.left, shape.top, shape.width, shape.height)
-                                    txBox.text = shape.text
-                                except: pass
-                            # Images
-                            if shape.shape_type == 13: # PICTURE
-                                # Image extractie is nodig, dit is complex.
-                                pass
+                                    ph_idx = shape.placeholder_format.idx
+                                    new_ph = new_slide.placeholders[ph_idx]
+
+                                    if shape.has_text_frame:
+                                        new_ph.text = shape.text_frame.text
+                                except KeyError:
+                                    pass # Placeholder bestaat niet in master layout
+
+                            # 2. Is het een losse vorm/tekst? Voeg toe.
+                            else:
+                                if shape.has_text_frame:
+                                    new_shape = new_slide.shapes.add_textbox(
+                                        shape.left, shape.top, shape.width, shape.height
+                                    )
+                                    new_shape.text = shape.text
+                                # (Afbeeldingen worden hier nog niet ondersteund)
 
                 except Exception as e:
                     print(f"ERROR merging {sub_path.name}: {e}")

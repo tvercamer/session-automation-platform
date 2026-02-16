@@ -1,26 +1,11 @@
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from pathlib import Path
-from typing import List, Dict, Any, Set, Optional
-import requests
-import uvicorn
-import json
-import sys
 import os
-import re
-import shutil
-from pptx import Presentation
-from pptx.util import Emu # Nodig voor berekeningen
-
-# --- IMPORTS FROM LIBRARY.PY ---
-from library import (
-    scan_directory,
-    resolve_dropped_item,
-    list_translatable_folders,
-    get_translations,
-    save_translations
-)
+import sys
+import json
+import uvicorn
+import requests
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- CONFIGURATION ---
 if sys.platform == "win32":
@@ -32,8 +17,26 @@ else:
 SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 
+# --- IMPORTS ---
+try:
+    from app.models import (
+        SettingsModel, ResolveRequest, GenerateRequest,
+        TransListPayload, TransLoadPayload, TransSavePayload
+    )
+    from app.services.library_service import LibraryService
+    from app.services.translation_service import TranslationService
+    from app.services.generator_service import GeneratorService
+except ImportError:
+    from models import (
+        SettingsModel, ResolveRequest, GenerateRequest,
+        TransListPayload, TransLoadPayload, TransSavePayload
+    )
+    from services.library_service import LibraryService
+    from services.translation_service import TranslationService
+    from services.generator_service import GeneratorService
+
 # --- APP SETUP ---
-app = FastAPI()
+app = FastAPI(title="SAP Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,304 +46,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- DATA MODELS ---
-
-class KeyLabel(BaseModel):
-    code: str
-    label: str
-    matches: List[str] = []
-
-class SettingsModel(BaseModel):
-    library_path: str
-    output_path: str
-    hubspot_api_key: str = ""
-    languages: List[KeyLabel] = []
-    industries: List[KeyLabel] = []
-
-class ResolveRequest(BaseModel):
-    path: str
-
-class SectionRequest(BaseModel):
-    title: str
-    topics: List[str]
-
-class GenerateRequest(BaseModel):
-    session_name: str
-    date: str
-    customer_name: str
-    customer_industry: str
-    industry_code: str
-    language_code: str
-    sections: List[SectionRequest]
-
-class TransListPayload(BaseModel):
-    rootPath: str
-
-class TransLoadPayload(BaseModel):
-    targetPath: str
-
-class TransSavePayload(BaseModel):
-    targetPath: str
-    entries: Dict[str, Any]
-
-# --- HELPERS ---
-
-def get_ignored_terms() -> Set[str]:
-    if not SETTINGS_FILE.exists(): return set()
-    try:
-        with open(SETTINGS_FILE, "r") as f:
-            data = json.load(f)
-            langs = {l['code'].lower() for l in data.get('languages', [])}
-            inds = {i['code'].lower() for i in data.get('industries', [])}
-            combined = langs.union(inds)
-            combined.update(['en', 'gen'])
-            final_set = combined.union({t.upper() for t in combined})
-            return final_set
-    except:
-        return set()
-
-def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> List[Path]:
-    base_topic = Path(topic).stem
-    found_files = []
-
-    candidates = [
-        f"{base_topic}_{lang}_{ind}",
-        f"{base_topic}_{ind}_{lang}",
-        f"{base_topic}_{lang}",
-        f"{base_topic}_{ind}",
-        base_topic
-    ]
-
-    best_file = None
-    for root, _, files in os.walk(library_path):
-        for cand in candidates:
-            for f in files:
-                f_path = Path(root) / f
-                if f_path.stem == cand:
-                    best_file = f_path
-                    break
-            if best_file: break
-        if best_file: break
-
-    if best_file:
-        found_files.append(best_file)
-        solution_name = f"{best_file.stem}_solution{best_file.suffix}"
-        solution_path = best_file.parent / solution_name
-        if solution_path.exists():
-            found_files.append(solution_path)
-
-    return found_files
-
-# --- IMAGE LOGIC (NIEUW) ---
-
-def find_screenshot(topic_folder: Path, shape_name: str, lang: str, ind: str) -> Optional[Path]:
-    """
-    Zoekt in de 'screenshots' subfolder naar een afbeelding die matcht met de shape_name.
-    """
-    screenshots_dir = topic_folder / "screenshots"
-    if not screenshots_dir.exists():
-        return None
-
-    # Extensies die we ondersteunen
-    extensions = ['.png', '.jpg', '.jpeg']
-
-    # Mogelijke bestandsnamen (zonder extensie)
-    candidates = [
-        f"{shape_name}_{lang}_{ind}",
-        f"{shape_name}_{ind}_{lang}",
-        f"{shape_name}_{lang}",
-        f"{shape_name}_{ind}",
-        shape_name
-    ]
-
-    # We itereren door de bestanden in de screenshots map
-    # Dit is efficiënter dan os.walk omdat het maar 1 map is
-    try:
-        files = os.listdir(screenshots_dir)
-        for cand in candidates:
-            for ext in extensions:
-                target = f"{cand}{ext}"
-                # Case-insensitive check voor bestandsnamen
-                for f in files:
-                    if f.lower() == target.lower():
-                        return screenshots_dir / f
-    except:
-        return None
-
-    return None
-
-def replace_image_with_fit(slide, shape, image_path: Path):
-    """
-    Vervangt 'shape' door de image op 'image_path'.
-    Behoudt aspect ratio en centreert in de originele box.
-    """
-    try:
-        # 1. Oude dimensies opslaan
-        old_left = shape.left
-        old_top = shape.top
-        old_width = shape.width
-        old_height = shape.height
-
-        # 2. Nieuwe afbeelding invoegen (native size)
-        new_pic = slide.shapes.add_picture(str(image_path), 0, 0)
-
-        # 3. Bereken aspect ratios
-        # Emu is de interne unit van PowerPoint
-        native_width = new_pic.width
-        native_height = new_pic.height
-
-        if native_width == 0 or native_height == 0: return # Safety check
-
-        aspect_ratio_img = native_width / native_height
-        aspect_ratio_box = old_width / old_height
-
-        new_width = 0
-        new_height = 0
-
-        # 4. Bereken nieuwe dimensies (Best Fit / Contain)
-        if aspect_ratio_img > aspect_ratio_box:
-            # Afbeelding is breder dan de box -> Fit op breedte
-            new_width = old_width
-            new_height = int(old_width / aspect_ratio_img)
-        else:
-            # Afbeelding is hoger dan de box -> Fit op hoogte
-            new_height = old_height
-            new_width = int(old_height * aspect_ratio_img)
-
-        # 5. Bereken centrering
-        offset_x = (old_width - new_width) // 2
-        offset_y = (old_height - new_height) // 2
-
-        new_left = old_left + offset_x
-        new_top = old_top + offset_y
-
-        # 6. Pas positie en grootte toe
-        new_pic.left = new_left
-        new_pic.top = new_top
-        new_pic.width = new_width
-        new_pic.height = new_height
-
-        # 7. Verwijder oude shape
-        # In python-pptx is verwijderen van shapes tricky, we verwijderen het element uit de XML tree
-        sp = shape.element
-        sp.getparent().remove(sp)
-
-        return True
-    except Exception as e:
-        print(f"ERROR replacing image: {e}")
-        return False
-
-# --- TRANSLATION LOGIC (UNCHANGED) ---
-
-def load_json_safely(path: Path) -> Dict:
-    if not path.exists(): return {}
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"ERROR: Corrupte JSON in {path}: {e}")
-        return {}
-
-def flatten_translation(data: Dict, lang: str, industry: str) -> Dict[str, str]:
-    result = {}
-    target_lang = lang.upper().strip()
-    target_ind = industry.lower().strip()
-
-    for key, content in data.items():
-        if not isinstance(content, dict): continue
-
-        value_found = None
-        if 'industries' in content and isinstance(content['industries'], dict):
-            ind_block = None
-            for k, v in content['industries'].items():
-                if k.lower() == target_ind:
-                    ind_block = v
-                    break
-            if ind_block:
-                for l_key, l_val in ind_block.items():
-                    if l_key.upper() == target_lang:
-                        value_found = l_val
-                        break
-                if not value_found:
-                    for l_key, l_val in ind_block.items():
-                        if l_key.upper() == 'EN':
-                            value_found = l_val
-                            break
-
-        if not value_found and 'default' in content:
-            def_block = content['default']
-            for l_key, l_val in def_block.items():
-                if l_key.upper() == target_lang:
-                    value_found = l_val
-                    break
-            if not value_found:
-                for l_key, l_val in def_block.items():
-                    if l_key.upper() == 'EN':
-                        value_found = l_val
-                        break
-
-        if value_found:
-            result[key] = value_found
-
-    return result
-
-def get_file_context(library_root: Path, file_path: Path, lang: str, ind: str, base_vars: Dict) -> Dict[str, str]:
-    context = {}
-    global_trans_path = library_root / "translations.json"
-    if global_trans_path.exists():
-        raw_global = load_json_safely(global_trans_path)
-        context.update(flatten_translation(raw_global, lang, ind))
-
-    local_trans_path = file_path.parent / "translations.json"
-    if local_trans_path.exists():
-        raw_local = load_json_safely(local_trans_path)
-        if raw_local:
-            context.update(flatten_translation(raw_local, lang, ind))
-
-    context.update(base_vars)
-    return context
-
-def apply_replacements(text_frame, context: Dict[str, str]):
-    if not text_frame or not text_frame.text: return
-    text = text_frame.text
-    pattern = re.compile(r'\[%\s*([\w\-]+)\s*%\]')
-    matches = pattern.findall(text)
-    if not matches: return
-
-    new_text = text
-    replaced = False
-    for key in matches:
-        val = None
-        if key in context: val = context[key]
-        elif key.lower() in context: val = context[key.lower()]
-
-        if val is not None:
-            key_pattern = re.compile(r'\[%\s*' + re.escape(key) + r'\s*%\]', re.IGNORECASE)
-            new_text = key_pattern.sub(str(val), new_text)
-            replaced = True
-
-    if replaced:
-        try: text_frame.text = new_text
-        except: pass
-
-# --- ENDPOINTS ---
+# --- ROUTES ---
 
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "SAP Backend"}
 
+# --- SETTINGS ---
+
 @app.get("/settings")
 def get_settings():
     if not SETTINGS_FILE.exists():
         return {"library_path": "", "output_path": "", "languages": [], "industries": []}
+
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
+            # Ensure lists exist
             if "languages" not in data: data["languages"] = []
             if "industries" not in data: data["industries"] = []
             return data
-    except Exception as e:
-        return {"error": str(e)}
+    except (OSError, json.JSONDecodeError) as e:
+        return {"error": f"Failed to load settings: {str(e)}"}
 
 @app.post("/settings")
 def save_settings(settings: SettingsModel):
@@ -348,27 +75,31 @@ def save_settings(settings: SettingsModel):
         with open(SETTINGS_FILE, "w") as f:
             json.dump(settings.model_dump(), f, indent=4)
         return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save settings: {str(e)}")
+
+# --- LIBRARY ---
 
 @app.get("/library")
 def get_library():
-    if not SETTINGS_FILE.exists(): return []
     try:
+        if not SETTINGS_FILE.exists(): return []
         with open(SETTINGS_FILE, "r") as f:
-            data = json.load(f)
-            path_str = data.get("library_path", "")
+            settings = json.load(f)
+            path_str = settings.get("library_path", "")
+
         if not path_str or not Path(path_str).exists(): return []
 
-        ignored = get_ignored_terms()
-        return scan_directory(Path(path_str), ignored)
-    except:
+        return LibraryService.scan_directory(Path(path_str))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"Library Scan Error: {e}")
         return []
 
 @app.post("/library/resolve")
 def resolve_drop(req: ResolveRequest):
-    ignored = get_ignored_terms()
-    return resolve_dropped_item(req.path, ignored)
+    return LibraryService.resolve_dropped_path(req.path)
+
+# --- GENERATION ---
 
 @app.post("/session/generate")
 async def generate_session(req: GenerateRequest):
@@ -381,163 +112,50 @@ async def generate_session(req: GenerateRequest):
             lib_path = Path(settings.get("library_path", ""))
             out_root = Path(settings.get("output_path", ""))
 
-        folder_name = f"{req.date}_{req.customer_name}_{req.session_name}".replace(" ", "_")
-        target_dir = out_root / folder_name
-        target_dir.mkdir(parents=True, exist_ok=True)
-        exercises_dir = target_dir / "exercises"
-        exercises_dir.mkdir(exist_ok=True)
+        if not lib_path.exists():
+            raise HTTPException(status_code=404, detail="Library path not found")
 
-        print(f"INFO: Start generatie voor {req.customer_name}")
+        # Delegate logic to Service
+        result = GeneratorService.generate_session(req, lib_path, out_root)
+        return result
 
-        system_vars = {
-            "customer_name": req.customer_name,
-            "customer": req.customer_name,
-            "klant": req.customer_name,
-            "session_name": req.session_name,
-            "session": req.session_name,
-            "date": req.date,
-            "datum": req.date,
-            "industry": req.customer_industry,
-            "industry_code": req.industry_code,
-            "language": req.language_code
-        }
-
-        files_copied = 0
-        pptx_merge_list = []
-
-        # --- VERZAMELEN ---
-        # A. Intro
-        intro_matches = find_best_matches(lib_path, "Intro", req.language_code, req.industry_code)
-        if intro_matches: pptx_merge_list.append(intro_matches[0])
-
-        # B. Sections
-        for section in req.sections:
-            for topic in section.topics:
-                matches = find_best_matches(lib_path, topic, req.language_code, req.industry_code)
-                for file_path in matches:
-                    if file_path.suffix.lower() == '.pptx':
-                        pptx_merge_list.append(file_path)
-                    else:
-                        dest_folder = exercises_dir
-                        final_name = file_path.name
-                        dest_path = dest_folder / final_name
-                        if dest_path.exists():
-                            safe_title = section.title.replace("/", "-").replace("\\", "-")
-                            final_name = f"{safe_title} - {file_path.name}"
-                            dest_path = dest_folder / final_name
-                            counter = 1
-                            while dest_path.exists():
-                                final_name = f"{safe_title} - {file_path.stem}_{counter}{file_path.suffix}"
-                                dest_path = dest_folder / final_name
-                                counter += 1
-                        try:
-                            shutil.copy2(file_path, dest_path)
-                            files_copied += 1
-                        except: pass
-
-        # C. Outro
-        outro_matches = find_best_matches(lib_path, "Outro", req.language_code, req.industry_code)
-        if outro_matches: pptx_merge_list.append(outro_matches[0])
-
-        # --- MERGEN EN VERVANGEN ---
-        if pptx_merge_list:
-            print(f"INFO: Mergen van {len(pptx_merge_list)} files...")
-
-            master_path = pptx_merge_list[0]
-            master_context = get_file_context(lib_path, master_path, req.language_code, req.industry_code, system_vars)
-
-            prs = Presentation(master_path)
-
-            # --- PROCESS MASTER SLIDES (TEXT & IMAGES) ---
-            # De master/intro heeft (meestal) geen screenshots subfolder, maar we checken het voor de volledigheid
-            for slide in prs.slides:
-                # 1. Text replacement
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        apply_replacements(shape.text_frame, master_context)
-
-                    # 2. Image replacement (Check in intro folder)
-                    # We gebruiken shape.name als key
-                    if find_screenshot(master_path.parent, shape.name, req.language_code, req.industry_code):
-                        img_path = find_screenshot(master_path.parent, shape.name, req.language_code, req.industry_code)
-                        if img_path:
-                            replace_image_with_fit(slide, shape, img_path)
-
-            # --- PROCESS SUB SLIDES ---
-            for i in range(1, len(pptx_merge_list)):
-                sub_path = pptx_merge_list[i]
-                file_context = get_file_context(lib_path, sub_path, req.language_code, req.industry_code, system_vars)
-
-                try:
-                    sub_prs = Presentation(sub_path)
-                    for slide in sub_prs.slides:
-                        layout_idx = sub_prs.slide_layouts.index(slide.slide_layout)
-                        try: slide_layout = prs.slide_layouts[layout_idx]
-                        except: slide_layout = prs.slide_layouts[0]
-
-                        new_slide = prs.slides.add_slide(slide_layout)
-
-                        # Shapes kopiëren en bewerken
-                        for shape in slide.shapes:
-                            # A. Placeholders
-                            if shape.is_placeholder:
-                                try:
-                                    ph_idx = shape.placeholder_format.idx
-                                    new_ph = new_slide.placeholders[ph_idx]
-                                    if shape.has_text_frame:
-                                        new_ph.text = shape.text_frame.text
-                                        apply_replacements(new_ph.text_frame, file_context)
-                                except KeyError: pass
-
-                            # B. Normale Shapes
-                            else:
-                                # B1. Check eerst op Images Replacement!
-                                # Kijk of er een screenshot is die matcht met de naam van deze shape
-                                img_match = find_screenshot(sub_path.parent, shape.name, req.language_code, req.industry_code)
-
-                                if img_match:
-                                    # Kopieer de placeholder shape naar de nieuwe slide (tijdelijk)
-                                    # We voegen een lege box toe met dezelfde afmetingen om te vervangen
-                                    placeholder_pic = new_slide.shapes.add_picture(str(img_match), shape.left, shape.top, shape.width, shape.height)
-                                    # De functie replace_image_with_fit verwacht een bestaande shape om te vervangen
-                                    # Maar add_picture voegt hem al toe.
-                                    # CORRECTIE: We gebruiken onze logica om aspect ratio te fixen direct hier.
-                                    replace_image_with_fit(new_slide, placeholder_pic, img_match)
-
-                                # B2. Tekstvakken
-                                elif shape.has_text_frame:
-                                    new_shape = new_slide.shapes.add_textbox(
-                                        shape.left, shape.top, shape.width, shape.height
-                                    )
-                                    new_shape.text = shape.text
-                                    apply_replacements(new_shape.text_frame, file_context)
-
-                                # B3. Bestaande Afbeeldingen (die GEEN screenshot replacement zijn)
-                                # python-pptx kopieert afbeeldingen niet makkelijk uit zichzelf.
-                                # Als de shape.name NIET matcht met een screenshot file, wordt hij momenteel genegeerd.
-                                # Dit is "Expected Behavior" volgens ons eerdere gesprek (geen deep copy).
-
-                except Exception as e:
-                    print(f"ERROR processing {sub_path.name}: {e}")
-
-            output_pptx = target_dir / "slides.pptx"
-            prs.save(output_pptx)
-            files_copied += 1
-
-        return {
-            "status": "success",
-            "target_dir": str(target_dir),
-            "files_count": files_copied
-        }
-
+    except HTTPException:
+        # Re-raise intentional HTTP exceptions (like 404s from above)
+        raise
     except Exception as e:
-        print(f"FATAL: {e}")
+        # Catch unexpected errors (like permissions or merging crashes)
+        print(f"FATAL ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- HUBSPOT & TRANSLATIONS (Keep as is) ---
+# --- TRANSLATIONS ---
+
+@app.post("/library/translations/folders")
+def get_trans_folders(req: TransListPayload):
+    return TranslationService.list_translatable_folders(
+        Path(req.rootPath),
+        LibraryService.IGNORED_FOLDERS
+    )
+
+@app.post("/library/translations/load")
+def load_trans(req: TransLoadPayload):
+    return TranslationService.load_json_safely(Path(req.targetPath) / "translations.json")
+
+@app.post("/library/translations/save")
+def save_trans(req: TransSavePayload):
+    success = TranslationService.save_json(
+        Path(req.targetPath) / "translations.json",
+        req.entries
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save translation file")
+    return {"success": True}
+
+# --- HUBSPOT ---
+
 @app.get("/hubspot/companies")
 def get_hubspot_companies():
     if not SETTINGS_FILE.exists(): return []
+
     try:
         with open(SETTINGS_FILE, "r") as f:
             api_key = json.load(f).get("hubspot_api_key", "")
@@ -550,23 +168,19 @@ def get_hubspot_companies():
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-        return [{"name": r["properties"].get("name"), "code": r["id"], "industry": r["properties"].get("industry", "")}
-                for r in data.get("results", []) if r["properties"].get("name")]
-    except: return []
 
-@app.post("/library/translations/folders")
-def get_trans_folders(req: TransListPayload):
-    return list_translatable_folders(req.rootPath)
-
-@app.post("/library/translations/load")
-def load_trans(req: TransLoadPayload):
-    return get_translations(req.targetPath)
-
-@app.post("/library/translations/save")
-def save_trans(req: TransSavePayload):
-    if not save_translations(req.targetPath, req.entries):
-        raise HTTPException(status_code=500, detail="Failed to save")
-    return {"success": True}
+        return [
+            {
+                "name": r["properties"].get("name"),
+                "code": r["id"],
+                "industry": r["properties"].get("industry", "")
+            }
+            for r in data.get("results", []) if r["properties"].get("name")
+        ]
+    except (requests.RequestException, OSError, json.JSONDecodeError, KeyError) as e:
+        # Catch specific errors: Network issues, File I/O, JSON parsing, or missing keys
+        print(f"HubSpot Error: {e}")
+        return []
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

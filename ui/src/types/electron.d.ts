@@ -17,6 +17,17 @@ declare global {
             getLibrary: () => Promise<any[]>;
             resolveDrop: (path: string) => Promise<any[]>;
 
+            // --- NIEUW: SESSION GENERATION ---
+            generateSession: (payload: {
+                session_name: string;
+                date: string;
+                customer_name: string;
+                customer_industry: string;
+                industry_code: string;
+                language_code: string;
+                playlist: string[];
+            }) => Promise<any>;
+
             // --- TRANSLATION MODULE ---
             getTransFolders: (rootPath: string) => Promise<any[]>;
             loadTrans: (targetPath: string) => Promise<any>;

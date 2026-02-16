@@ -6,7 +6,7 @@ import { confirmPopup, ConfirmPopup } from 'primereact/confirmpopup';
 import { Toast } from 'primereact/toast';
 import { usePlaylistDnD } from '../../hooks/usePlaylistDnD';
 import { SortableSection } from './SortableSection';
-import type {Section, FileItem, SessionSettings} from '../../types/session';
+import type { Section, FileItem, SessionSettings } from '../../types/session';
 
 interface PlaylistPanelProps {
     sections: Section[];
@@ -19,7 +19,8 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
     const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
     const [justAddedSectionId, setJustAddedSectionId] = useState<string | null>(null);
 
-    console.log(settings)
+    // --- NIEUW: State voor de genereer knop ---
+    const [generating, setGenerating] = useState(false);
 
     // Filter out Intro/Outro from the draggable list
     const visibleSections = sections.filter(s =>
@@ -102,6 +103,48 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
         setEditingSectionId(null);
     };
 
+    // --- GENERATE HANDLER (NIEUW) ---
+    const handleGenerate = async () => {
+        // 1. Validatie
+        if (!settings.customer || !settings.language || !settings.industry) {
+            console.warn("Generatie gestopt: Klant, Taal of Industrie ontbreekt.");
+            toast.current?.show({
+                severity: 'warn',
+                summary: 'Configuratie',
+                detail: 'Selecteer eerst een Klant, Industrie en Taal.'
+            });
+            return;
+        }
+
+        setGenerating(true);
+
+        // 2. Verzamel bestanden uit de zichtbare secties
+        const playlistTopics = visibleSections.flatMap(sec =>
+            sec.items.map(item => item.name)
+        );
+
+        try {
+            // 3. API Aanroep
+            await window.electronAPI.generateSession({
+                session_name: settings.sessionName || 'Sessie',
+                date: settings.date ? settings.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                // Veilig omgaan met objecten vs strings (voor het geval types wijzigen)
+                customer_name: typeof settings.customer === 'string' ? settings.customer : settings.customer.name,
+                customer_industry: typeof settings.industry === 'string' ? settings.industry : settings.industry.label,
+                industry_code: typeof settings.industry === 'string' ? settings.industry : settings.industry.code,
+                language_code: typeof settings.language === 'string' ? settings.language : settings.language.code,
+                playlist: playlistTopics
+            });
+
+            // Feedback: dit gaat nu via ConsolePanel logs die uit de backend komen
+        } catch (err) {
+            console.error("Fout tijdens genereren:", err);
+            toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Generatie mislukt. Zie console.' });
+        } finally {
+            setGenerating(false);
+        }
+    };
+
     // --- SMART DROP HANDLER ---
     const onNativeDrop = async (e: DragEvent) => {
         e.preventDefault();
@@ -120,7 +163,6 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
             const sectionElement = dropTarget?.closest('[data-section-id]');
             const targetSectionId = sectionElement?.getAttribute('data-section-id');
 
-            // Simplified: No language/industry args needed
             const resolvedFiles = await window.electronAPI.resolveDrop(droppedPath);
 
             if (!resolvedFiles || resolvedFiles.length === 0) {
@@ -288,10 +330,11 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
             {/* FOOTER: Actions */}
             <div className="p-3 border-top-1 surface-border bg-gray-900 flex gap-2">
                 <Button
-                    label="Generate Session"
-                    icon="pi pi-cog"
+                    label={generating ? "Generating..." : "Generate Session"}
+                    icon={generating ? "pi pi-spin pi-spinner" : "pi pi-cog"}
                     className="flex-1 p-button-primary"
-                    onClick={() => console.log('Generate clicked')}
+                    onClick={handleGenerate}
+                    disabled={generating}
                 />
 
                 <Button

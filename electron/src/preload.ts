@@ -13,7 +13,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // --- LIBRARY ---
     getLibrary: () => ipcRenderer.invoke('library:get'),
-    resolveDrop: (path: string) => ipcRenderer.invoke('library:resolve', { path }),
+
+    // LET OP: We sturen hier nu direct de string 'path'.
+    // main.ts pakt hem in als { path: args } voor Python.
+    resolveDrop: (path: string) => ipcRenderer.invoke('library:resolve', path),
+
+    // --- SESSION (NIEUW) ---
+    // Stuurt de payload (naam, datum, playlist, etc.) naar main.ts
+    generateSession: (payload: any) => ipcRenderer.invoke('session:generate', payload),
 
     // --- TRANSLATIONS ---
     getTransFolders: (rootPath: string) => ipcRenderer.invoke('trans:folders', { rootPath }),

@@ -9,6 +9,7 @@ import json
 import sys
 import os
 import re
+import shutil  # Toegevoegd voor het kopiëren van bestanden
 
 # --- IMPORTS FROM LIBRARY.PY ---
 from library import (
@@ -91,35 +92,58 @@ def get_ignored_terms() -> Set[str]:
             combined.update(['en', 'gen'])
 
             final_set = combined.union({t.upper() for t in combined})
-            print(f"DEBUG: Ignoring files containing tokens: {final_set}")
+            # print(f"DEBUG: Ignoring files containing tokens: {final_set}")
             return final_set
     except:
         return set()
 
-def find_best_match(library_path: Path, topic: str, lang: str, ind: str) -> Path:
+def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> List[Path]:
     """
-    Logic to find the most specific file version.
+    Zoekt de beste match voor een topic EN de optionele _solution variant.
     Priority: 1. Topic_Lang_Ind, 2. Topic_Ind_Lang, 3. Topic_Lang, 4. Topic_Ind, 5. Topic (Base)
     """
     # Clean topic from extension if provided
     base_topic = Path(topic).stem
 
+    found_files = []
+
     candidates = [
-        f"{base_topic}_{lang}_{ind}.pptx",
-        f"{base_topic}_{ind}_{lang}.pptx",
-        f"{base_topic}_{lang}.pptx",
-        f"{base_topic}_{ind}.pptx",
-        f"{base_topic}.pptx"
+        f"{base_topic}_{lang}_{ind}",
+        f"{base_topic}_{ind}_{lang}",
+        f"{base_topic}_{lang}",
+        f"{base_topic}_{ind}",
+        base_topic
     ]
 
-    # Search recursively in library
-    for root, _, files in os.walk(library_path):
-        for candidate in candidates:
-            if candidate in files:
-                return Path(root) / candidate
+    best_file = None
 
-    # Fallback to the original base path if found in library
-    return library_path / f"{base_topic}.pptx"
+    # 1. Zoek recursief in de library naar de beste match
+    for root, _, files in os.walk(library_path):
+        for cand in candidates:
+            # We kijken of er een bestand is dat matcht met de candidate naam
+            # We checken flexibel op extensies (.pptx, .xlsx, .docx, .txt)
+            for f in files:
+                f_path = Path(root) / f
+                # Check of de bestandsnaam (zonder extensie) overeenkomt met de kandidaat
+                if f_path.stem == cand:
+                    best_file = f_path
+                    break
+            if best_file: break
+        if best_file: break
+
+    # 2. Als we een match hebben, voeg toe aan resultaten
+    if best_file:
+        found_files.append(best_file)
+
+        # 3. Zoek nu naar de _solution variant van PRECIES dit gevonden bestand
+        # Voorbeeld: match is 'Report_NL.pptx' -> zoek 'Report_NL_solution.pptx'
+        solution_name = f"{best_file.stem}_solution{best_file.suffix}"
+        solution_path = best_file.parent / solution_name
+
+        if solution_path.exists():
+            found_files.append(solution_path)
+
+    return found_files
 
 # --- ENDPOINTS ---
 
@@ -172,9 +196,9 @@ def resolve_drop(req: ResolveRequest):
 async def generate_session(req: GenerateRequest):
     """
     Final generation logic:
-    1. Resolve all playlist topics to actual file paths (Smart Mapping)
+    1. Resolve all playlist topics to actual file paths (Smart Mapping + Solutions)
     2. Create output directory
-    3. [Future] Run PowerPoint merge logic
+    3. Copy files to output directory
     """
     if not SETTINGS_FILE.exists():
         raise HTTPException(status_code=500, detail="Settings not found")
@@ -185,26 +209,42 @@ async def generate_session(req: GenerateRequest):
             lib_path = Path(settings.get("library_path", ""))
             out_root = Path(settings.get("output_path", ""))
 
-        # Create session folder: [DATE]-[CUSTOMER]-[NAME]
+        # Create session folder: [DATE]_[CUSTOMER]_[NAME]
         folder_name = f"{req.date}_{req.customer_name}_{req.session_name}".replace(" ", "_")
         target_dir = out_root / folder_name
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        resolved_paths = []
-        print(f"--- Generating Session: {req.session_name} ---")
+        print(f"INFO: Start generatie voor klant '{req.customer_name}'...")
+        print(f"INFO: Doelmap: {target_dir}")
+
+        files_copied = 0
 
         for topic in req.playlist:
-            match = find_best_match(lib_path, topic, req.language_code, req.industry_code)
-            resolved_paths.append(str(match))
-            print(f"Resolved '{topic}' -> {match.name}")
+            # Zoek matches (inclusief solutions)
+            matches = find_best_matches(lib_path, topic, req.language_code, req.industry_code)
 
-        # Return success with paths for now (Actual merge logic comes next)
+            if not matches:
+                print(f"WARN: Geen bestanden gevonden voor topic '{topic}'")
+                continue
+
+            for file_path in matches:
+                try:
+                    # Kopieer bestand naar de nieuwe map
+                    shutil.copy2(file_path, target_dir / file_path.name)
+                    print(f"INFO: Gekopieerd: {file_path.name}")
+                    files_copied += 1
+                except Exception as copy_err:
+                    print(f"ERROR: Kon {file_path.name} niet kopiëren: {copy_err}")
+
+        print(f"SUCCESS: Generatie voltooid. {files_copied} bestanden klaar.")
+
         return {
             "status": "success",
             "target_dir": str(target_dir),
-            "files": resolved_paths
+            "files_count": files_copied
         }
     except Exception as e:
+        print(f"FATAL ERROR: Generatie mislukt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- HUBSPOT & TRANSLATIONS (Keep as is) ---

@@ -16,26 +16,23 @@ const pythonPort = 8000;
 
 // ---------- WINDOW MANAGEMENT ---------- \\
 function createMainWindow() {
-    // Determine the URL to load
     const startURL = isDev
         ? devUrl
         : pathToFileURL(path.join(__dirname, '../../ui/dist/index.html')).href;
 
-    // Create the browser window.
     mainBrowserWindow = new BrowserWindow({
         width: 1200,
         height: 800,
-        autoHideMenuBar: true, // Will be replaced by a custom menu in the React frontend
+        autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
         },
     })
-    mainBrowserWindow.setMenu(null); // Also hides the menu when holding the ALT key
+    mainBrowserWindow.setMenu(null);
     mainBrowserWindow.loadURL(startURL).then();
 
-    // Handle browser window closed
     mainBrowserWindow.on('closed', () => {
         mainBrowserWindow = null;
     })
@@ -43,12 +40,10 @@ function createMainWindow() {
 
 // ---------- BACKEND SERVER MANAGEMENT ---------- \\
 
-// Helper to send logs to the frontend ConsolePanel
 function sendLogToWindow(level: string, message: string) {
     if (mainBrowserWindow) {
-        // Sends event 'app-console' which preload.ts listens for
         mainBrowserWindow.webContents.send('app-console', {
-            timestamp: new Date().toLocaleTimeString('en-GB'), // HH:MM:SS
+            timestamp: new Date().toLocaleTimeString('en-GB'),
             level: level,
             message: message.trim()
         });
@@ -64,7 +59,6 @@ function createPythonProcess(){
             ? path.join(__dirname, '../../backend/.venv/Scripts/python.exe')
             : path.join(__dirname, '../../backend/.venv/bin/python')
     } else{
-        // TODO: for PRD point to bundled python interpreter
         console.log('Production python path not set yet.')
         return;
     }
@@ -73,29 +67,24 @@ function createPythonProcess(){
     console.log(`Python Path: ${pythonPath}`)
     console.log(`Script Path: ${scriptPath}`)
 
-    // Log to UI
     sendLogToWindow('INFO', 'Starting Python backend...');
     sendLogToWindow('DEBUG', `Script: ${scriptPath}`);
 
     pythonProcess = spawn(pythonPath, [scriptPath, `${pythonPort}`])
 
-    // 1. Capture STDOUT (Standard Output)
     if (pythonProcess.stdout) {
         pythonProcess.stdout.on('data', (data) => {
             const str = data.toString();
             console.log('py:stdout:', str);
-            // Forward to UI
             sendLogToWindow('INFO', str);
         });
     }
 
-    // 2. Capture STDERR (Errors & Logs)
     if (pythonProcess.stderr) {
         pythonProcess.stderr.on('data', (data) => {
             const str = data.toString();
             console.error('py:stderr:', str);
 
-            // Simple heuristic to determine log level from string
             let level = 'DEBUG';
             const lower = str.toLowerCase();
             if (lower.includes('error') || lower.includes('exception') || lower.includes('failed')) level = 'ERROR';
@@ -116,14 +105,13 @@ function createPythonProcess(){
 
 function exitPytonProcess() {
     if (pythonProcess) {
-        // On Windows, simple kill() might not kill subprocesses
-        // but for a simple spawned python script it is usually sufficient.
         pythonProcess.kill();
         pythonProcess = null;
         console.log('Python process killed');
     }
 }
 
+// Helper function to make HTTP requests to Python
 const requestPython = (method: string, endpoint: string, body: any = null) => {
     return new Promise((resolve, reject) => {
         const request = net.request({
@@ -162,7 +150,6 @@ app.whenReady().then(() => {
     createPythonProcess();
     createMainWindow()
 
-    // Listeners
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createMainWindow()
@@ -218,7 +205,13 @@ ipcMain.handle('library:get', async () => {
 });
 
 ipcMain.handle('library:resolve', async (event, args) => {
-    return await requestPython('POST', '/library/resolve', args);
+    // args = { path: "..." }
+    return await requestPython('POST', '/library/resolve', { path: args });
+});
+
+// --- SESSION GENERATION (NIEUW) ---
+ipcMain.handle('session:generate', async (event, payload) => {
+    return await requestPython('POST', '/session/generate', payload);
 });
 
 // --- TRANSLATIONS ---

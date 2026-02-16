@@ -6,17 +6,20 @@ import { confirmPopup, ConfirmPopup } from 'primereact/confirmpopup';
 import { Toast } from 'primereact/toast';
 import { usePlaylistDnD } from '../../hooks/usePlaylistDnD';
 import { SortableSection } from './SortableSection';
-import type { Section, FileItem } from '../../types/session';
+import type {Section, FileItem, SessionSettings} from '../../types/session';
 
 interface PlaylistPanelProps {
     sections: Section[];
     setSections: (val: Section[]) => void;
+    settings: SessionSettings;
 }
 
-export default function PlaylistPanel({ sections, setSections }: PlaylistPanelProps) {
+export default function PlaylistPanel({ sections, setSections, settings }: PlaylistPanelProps) {
     const toast = useRef<Toast>(null);
     const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
     const [justAddedSectionId, setJustAddedSectionId] = useState<string | null>(null);
+
+    console.log(settings)
 
     // Filter out Intro/Outro from the draggable list
     const visibleSections = sections.filter(s =>

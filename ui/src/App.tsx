@@ -4,55 +4,68 @@ import ConsolePanel from './components/ConsolePanel';
 import { useState, useEffect, useRef } from 'react';
 import type { TreeNode } from 'primereact/treenode';
 import Workspace from "./components/Workspace.tsx";
-import type {Section, SessionSettings} from "./types/session.ts";
+import type { Section, SessionSettings } from "./types/session.ts";
 import AppMenu from "./components/AppMenu.tsx";
 import { Toast } from 'primereact/toast';
-
 
 export default function App() {
     /* ------------------------------------------------------------------------------------
      * STATE MANAGEMENT
      * --------------------------------------------------------------------------------- */
 
-    // ----- VIEWS
     const toast = useRef<Toast>(null);
+
+    // ----- VIEWS
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
     const handleSettings = () => {
         setIsSettingsVisible(true);
     };
 
     // ----- Session Settings
-    const [sessionSettings, setSessionSettings] = useState({
+    const [sessionSettings, setSessionSettings] = useState<SessionSettings>({
         sessionName: '',
-        customer: '',
+        customer: null,
         date: new Date(Date.now() + 14*24*60*60*1000), // Default +14 days
-        industry: 'Generic',
-        language: 'EN'
+        industry: null,
+        language: null
     });
+
     const handleSessionSettingsChange = (field: keyof SessionSettings, value: any) => {
         setSessionSettings(prev => ({ ...prev, [field]: value }));
     };
 
     // ----- Library Settings
     const [libraryNodes, setLibraryNodes] = useState<TreeNode[]>([]);
+    const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+
     const loadLibrary = async () => {
+        setIsLibraryLoading(true);
         try {
             console.log("Fetching library...");
             const data = await window.electronAPI.getLibrary();
             console.log("Library data received:", data);
-
-            // If backend returns an error object (like "path not found"), it will still be a valid array
             setLibraryNodes(data);
         } catch (e) {
             console.error("Failed to load library", e);
+            toast.current?.show({
+                severity: 'error',
+                summary: 'Error',
+                detail: 'Could not refresh library.'
+            });
+        } finally {
+            setIsLibraryLoading(false);
         }
     };
+
     useEffect(() => {
-        loadLibrary().then()
-    }, [])
+        loadLibrary();
+    }, []);
 
     // ----- Playlist Settings
-    const [sections, setSections] = useState<Section[]>([]);
+    const [sections, setSections] = useState<Section[]>([
+        { id: 'intro', title: 'Introduction', isLocked: true, items: [] },
+        { id: 'outro', title: 'Outro', isLocked: true, items: [] }
+    ]);
 
     /* ------------------------------------------------------------------------------------
      * RENDERING
@@ -79,6 +92,8 @@ export default function App() {
                 settings={sessionSettings}
                 onSettingChange={handleSessionSettingsChange}
                 libraryNodes={libraryNodes}
+                isLibraryLoading={isLibraryLoading} // Nieuw: Geef loading state door
+                onLibraryRefresh={loadLibrary}      // Nieuw: Geef refresh functie door
                 sections={sections}
                 setSections={setSections}
             />

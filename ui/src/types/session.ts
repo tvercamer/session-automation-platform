@@ -31,3 +31,18 @@ export interface SessionSettings {
     industry: KeyLabel | null;
     language: KeyLabel | null;
 }
+
+export interface SectionRequest {
+    title: string;
+    topics: string[];
+}
+
+export interface GeneratePayload {
+    session_name: string;
+    date: string;
+    customer_name: string;
+    customer_industry: string;
+    industry_code: string;
+    language_code: string;
+    sections: SectionRequest[];
+}

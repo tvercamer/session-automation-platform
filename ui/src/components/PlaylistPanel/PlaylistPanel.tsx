@@ -19,7 +19,6 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
     const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
     const [justAddedSectionId, setJustAddedSectionId] = useState<string | null>(null);
 
-    // --- NIEUW: State voor de genereer knop ---
     const [generating, setGenerating] = useState(false);
 
     // Filter out Intro/Outro from the draggable list
@@ -103,7 +102,7 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
         setEditingSectionId(null);
     };
 
-    // --- GENERATE HANDLER (NIEUW) ---
+    // --- GENERATE HANDLER (UPDATED) ---
     const handleGenerate = async () => {
         // 1. Validatie
         if (!settings.customer || !settings.language || !settings.industry) {
@@ -118,25 +117,27 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
         setGenerating(true);
 
-        // 2. Verzamel bestanden uit de zichtbare secties
-        const playlistTopics = visibleSections.flatMap(sec =>
-            sec.items.map(item => item.name)
-        );
+        // 2. Verzamel bestanden per sectie (NIEUWE STRUCTUUR)
+        // We mappen nu naar objecten met { title, topics } ipv een platte lijst
+        const sectionsPayload = visibleSections.map(sec => ({
+            title: sec.title,
+            topics: sec.items.map(item => item.name)
+        }));
 
         try {
             // 3. API Aanroep
             await window.electronAPI.generateSession({
                 session_name: settings.sessionName || 'Sessie',
                 date: settings.date ? settings.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                // Veilig omgaan met objecten vs strings (voor het geval types wijzigen)
+                // Veilig omgaan met objecten vs strings
                 customer_name: typeof settings.customer === 'string' ? settings.customer : settings.customer.name,
                 customer_industry: typeof settings.industry === 'string' ? settings.industry : settings.industry.label,
                 industry_code: typeof settings.industry === 'string' ? settings.industry : settings.industry.code,
                 language_code: typeof settings.language === 'string' ? settings.language : settings.language.code,
-                playlist: playlistTopics
+                sections: sectionsPayload // <--- AANGEPAST: We sturen nu de structuur mee
             });
 
-            // Feedback: dit gaat nu via ConsolePanel logs die uit de backend komen
+            // Feedback: dit gaat via ConsolePanel logs die uit de backend komen
         } catch (err) {
             console.error("Fout tijdens genereren:", err);
             toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Generatie mislukt. Zie console.' });

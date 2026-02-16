@@ -17,7 +17,7 @@ declare global {
             getLibrary: () => Promise<any[]>;
             resolveDrop: (path: string) => Promise<any[]>;
 
-            // --- NIEUW: SESSION GENERATION ---
+            // --- SESSION GENERATION ---
             generateSession: (payload: {
                 session_name: string;
                 date: string;
@@ -25,7 +25,7 @@ declare global {
                 customer_industry: string;
                 industry_code: string;
                 language_code: string;
-                playlist: string[];
+                sections: { title: string; topics: string[] }[];
             }) => Promise<any>;
 
             // --- TRANSLATION MODULE ---

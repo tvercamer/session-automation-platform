@@ -9,7 +9,7 @@ import json
 import sys
 import os
 import re
-import shutil  # Toegevoegd voor het kopiëren van bestanden
+import shutil
 
 # --- IMPORTS FROM LIBRARY.PY ---
 from library import (
@@ -58,6 +58,12 @@ class SettingsModel(BaseModel):
 class ResolveRequest(BaseModel):
     path: str
 
+# NIEUW: Model voor een individuele sectie
+class SectionRequest(BaseModel):
+    title: str
+    topics: List[str]
+
+# AANGEPAST: GenerateRequest gebruikt nu SectionRequest
 class GenerateRequest(BaseModel):
     session_name: str
     date: str
@@ -65,7 +71,7 @@ class GenerateRequest(BaseModel):
     customer_industry: str
     industry_code: str
     language_code: str
-    playlist: List[str] # List of base filenames/topics
+    sections: List[SectionRequest] # Was voorheen playlist: List[str]
 
 class TransListPayload(BaseModel):
     rootPath: str
@@ -92,7 +98,6 @@ def get_ignored_terms() -> Set[str]:
             combined.update(['en', 'gen'])
 
             final_set = combined.union({t.upper() for t in combined})
-            # print(f"DEBUG: Ignoring files containing tokens: {final_set}")
             return final_set
     except:
         return set()
@@ -102,9 +107,7 @@ def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> Li
     Zoekt de beste match voor een topic EN de optionele _solution variant.
     Priority: 1. Topic_Lang_Ind, 2. Topic_Ind_Lang, 3. Topic_Lang, 4. Topic_Ind, 5. Topic (Base)
     """
-    # Clean topic from extension if provided
     base_topic = Path(topic).stem
-
     found_files = []
 
     candidates = [
@@ -117,29 +120,20 @@ def find_best_matches(library_path: Path, topic: str, lang: str, ind: str) -> Li
 
     best_file = None
 
-    # 1. Zoek recursief in de library naar de beste match
     for root, _, files in os.walk(library_path):
         for cand in candidates:
-            # We kijken of er een bestand is dat matcht met de candidate naam
-            # We checken flexibel op extensies (.pptx, .xlsx, .docx, .txt)
             for f in files:
                 f_path = Path(root) / f
-                # Check of de bestandsnaam (zonder extensie) overeenkomt met de kandidaat
                 if f_path.stem == cand:
                     best_file = f_path
                     break
             if best_file: break
         if best_file: break
 
-    # 2. Als we een match hebben, voeg toe aan resultaten
     if best_file:
         found_files.append(best_file)
-
-        # 3. Zoek nu naar de _solution variant van PRECIES dit gevonden bestand
-        # Voorbeeld: match is 'Report_NL.pptx' -> zoek 'Report_NL_solution.pptx'
         solution_name = f"{best_file.stem}_solution{best_file.suffix}"
         solution_path = best_file.parent / solution_name
-
         if solution_path.exists():
             found_files.append(solution_path)
 
@@ -196,9 +190,10 @@ def resolve_drop(req: ResolveRequest):
 async def generate_session(req: GenerateRequest):
     """
     Final generation logic:
-    1. Resolve all playlist topics to actual file paths (Smart Mapping + Solutions)
-    2. Create output directory
-    3. Copy files to output directory
+    1. Create folders (Root + Exercises)
+    2. Iterate through SECTIONS
+    3. Resolve files
+    4. Handle collisions (Section prefix)
     """
     if not SETTINGS_FILE.exists():
         raise HTTPException(status_code=500, detail="Settings not found")
@@ -209,32 +204,66 @@ async def generate_session(req: GenerateRequest):
             lib_path = Path(settings.get("library_path", ""))
             out_root = Path(settings.get("output_path", ""))
 
-        # Create session folder: [DATE]_[CUSTOMER]_[NAME]
+        # 1. Maak hoofdmap: [DATE]_[CUSTOMER]_[NAME]
         folder_name = f"{req.date}_{req.customer_name}_{req.session_name}".replace(" ", "_")
         target_dir = out_root / folder_name
         target_dir.mkdir(parents=True, exist_ok=True)
+
+        # 2. Maak exercises submap
+        exercises_dir = target_dir / "exercises"
+        exercises_dir.mkdir(exist_ok=True)
 
         print(f"INFO: Start generatie voor klant '{req.customer_name}'...")
         print(f"INFO: Doelmap: {target_dir}")
 
         files_copied = 0
 
-        for topic in req.playlist:
-            # Zoek matches (inclusief solutions)
-            matches = find_best_matches(lib_path, topic, req.language_code, req.industry_code)
+        # Itereren per sectie om context te behouden voor collisions
+        for section in req.sections:
+            print(f"INFO: Verwerken sectie '{section.title}'...")
 
-            if not matches:
-                print(f"WARN: Geen bestanden gevonden voor topic '{topic}'")
-                continue
+            for topic in section.topics:
+                matches = find_best_matches(lib_path, topic, req.language_code, req.industry_code)
 
-            for file_path in matches:
-                try:
-                    # Kopieer bestand naar de nieuwe map
-                    shutil.copy2(file_path, target_dir / file_path.name)
-                    print(f"INFO: Gekopieerd: {file_path.name}")
-                    files_copied += 1
-                except Exception as copy_err:
-                    print(f"ERROR: Kon {file_path.name} niet kopiëren: {copy_err}")
+                if not matches:
+                    print(f"WARN: Geen bestanden gevonden voor '{topic}'")
+                    continue
+
+                for file_path in matches:
+                    try:
+                        # BEPAAL BESTEMMING
+                        # .pptx naar root, de rest naar exercises
+                        if file_path.suffix.lower() == '.pptx':
+                            dest_folder = target_dir
+                        else:
+                            dest_folder = exercises_dir
+
+                        # BEPAAL BESTANDSNAAM & COLLISIE LOGICA
+                        final_name = file_path.name
+                        dest_path = dest_folder / final_name
+
+                        if dest_path.exists():
+                            # Bestand bestaat al? Prefix met sectie titel.
+                            # Vervang onveilige karakters in sectietitel
+                            safe_title = section.title.replace("/", "-").replace("\\", "-")
+
+                            final_name = f"{safe_title} - {file_path.name}"
+                            dest_path = dest_folder / final_name
+
+                            # Edge case: Wat als die OOK al bestaat? (bv. 2x zelfde file in 1 sectie)
+                            counter = 1
+                            while dest_path.exists():
+                                final_name = f"{safe_title} - {file_path.stem}_{counter}{file_path.suffix}"
+                                dest_path = dest_folder / final_name
+                                counter += 1
+
+                        # Kopiëren
+                        shutil.copy2(file_path, dest_path)
+                        print(f"INFO: Gekopieerd: {final_name}")
+                        files_copied += 1
+
+                    except Exception as copy_err:
+                        print(f"ERROR: Kon {file_path.name} niet kopiëren: {copy_err}")
 
         print(f"SUCCESS: Generatie voltooid. {files_copied} bestanden klaar.")
 

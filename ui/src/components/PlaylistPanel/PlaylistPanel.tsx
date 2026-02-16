@@ -21,6 +21,9 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
     const [generating, setGenerating] = useState(false);
 
+    // NIEUW: Houdt het pad bij van de laatst gegenereerde sessie
+    const [lastGeneratedPath, setLastGeneratedPath] = useState<string | null>(null);
+
     // Filter out Intro/Outro from the draggable list
     const visibleSections = sections.filter(s =>
         s.id !== 'intro' &&
@@ -102,11 +105,9 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
         setEditingSectionId(null);
     };
 
-    // --- GENERATE HANDLER (UPDATED) ---
+    // --- GENERATE HANDLER ---
     const handleGenerate = async () => {
-        // 1. Validatie
         if (!settings.customer || !settings.language || !settings.industry) {
-            console.warn("Generatie gestopt: Klant, Taal of Industrie ontbreekt.");
             toast.current?.show({
                 severity: 'warn',
                 summary: 'Configuratie',
@@ -116,33 +117,42 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
         }
 
         setGenerating(true);
+        setLastGeneratedPath(null); // Reset path bij nieuwe poging
 
-        // 2. Verzamel bestanden per sectie (NIEUWE STRUCTUUR)
-        // We mappen nu naar objecten met { title, topics } ipv een platte lijst
         const sectionsPayload = visibleSections.map(sec => ({
             title: sec.title,
             topics: sec.items.map(item => item.name)
         }));
 
         try {
-            // 3. API Aanroep
-            await window.electronAPI.generateSession({
+            const result = await window.electronAPI.generateSession({
                 session_name: settings.sessionName || 'Sessie',
                 date: settings.date ? settings.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                // Veilig omgaan met objecten vs strings
                 customer_name: typeof settings.customer === 'string' ? settings.customer : settings.customer.name,
                 customer_industry: typeof settings.industry === 'string' ? settings.industry : settings.industry.label,
                 industry_code: typeof settings.industry === 'string' ? settings.industry : settings.industry.code,
                 language_code: typeof settings.language === 'string' ? settings.language : settings.language.code,
-                sections: sectionsPayload // <--- AANGEPAST: We sturen nu de structuur mee
+                sections: sectionsPayload
             });
 
-            // Feedback: dit gaat via ConsolePanel logs die uit de backend komen
+            // Als succesvol, sla het pad op zodat de knop enabled wordt
+            if (result && result.status === 'success' && result.target_dir) {
+                setLastGeneratedPath(result.target_dir);
+                toast.current?.show({ severity: 'success', summary: 'Klaar!', detail: 'Sessie gegenereerd.' });
+            }
+
         } catch (err) {
             console.error("Fout tijdens genereren:", err);
             toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Generatie mislukt. Zie console.' });
         } finally {
             setGenerating(false);
+        }
+    };
+
+    // --- PREVIEW HANDLER (NIEUW) ---
+    const handlePreview = () => {
+        if (lastGeneratedPath) {
+            window.electronAPI.openPath(lastGeneratedPath);
         }
     };
 
@@ -339,11 +349,11 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
                 />
 
                 <Button
-                    disabled={true}
+                    disabled={!lastGeneratedPath}
                     label="Preview Files"
                     icon="pi pi-folder-open"
                     className="flex-1 p-button-outlined p-button-secondary"
-                    onClick={() => console.log('Preview clicked')}
+                    onClick={handlePreview}
                 />
             </div>
         </div>

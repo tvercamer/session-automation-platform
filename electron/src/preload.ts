@@ -37,5 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
         // Return a cleanup function to remove listener
         return () => ipcRenderer.removeListener('app-console', subscription);
-    }
+    },
+
+    openPath: (path: string) => ipcRenderer.invoke('system:openPath', path),
 });

@@ -7,6 +7,7 @@ declare global {
             quitApp: () => void;
             toggleDevTools: () => void;
             help: () => void;
+            openPath: (path: string) => Promise<string>;
 
             // Settings & Dialogs
             selectFolder: () => Promise<string | null>;

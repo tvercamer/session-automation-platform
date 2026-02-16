@@ -231,3 +231,12 @@ ipcMain.handle('trans:save', async (event, args) => {
 ipcMain.handle('hubspot:companies', async () => {
     return await requestPython('GET', '/hubspot/companies');
 });
+
+ipcMain.handle('system:openPath', async (_event, pathStr) => {
+    // shell.openPath opent het bestand of de map met de standaard applicatie
+    const result = await shell.openPath(pathStr);
+    if (result) {
+        console.error(`Failed to open path: ${result}`);
+    }
+    return result;
+});

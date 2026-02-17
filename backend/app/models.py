@@ -6,6 +6,7 @@ class KeyLabel(BaseModel):
     code: str
     label: str
     matches: List[str] = []
+    isDefault: bool = False
 
 class SettingsModel(BaseModel):
     library_path: str

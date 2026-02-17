@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { InputText } from 'primereact/inputtext';
+import { Chips } from 'primereact/chips';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
-import { Chips } from 'primereact/chips';
-import { type AppSettings, DEFAULT_IND } from '../../types/settings';
+import { InputText } from 'primereact/inputtext';
+import { RadioButton } from 'primereact/radiobutton';
+import { type AppSettings } from '../../types/settings';
 
 interface IndustryTabProps {
     settings: AppSettings;
@@ -19,21 +20,32 @@ export default function IndustryTab({ settings, onUpdate }: IndustryTabProps) {
         if (!code || !label) return;
         const lowerCode = code.toLowerCase();
         if (settings.industries.find(i => i.code === lowerCode)) return;
+        const isFirst = settings.industries.length === 0;
+
+        const newInd = {
+            code: lowerCode,
+            label,
+            matches: [],
+            isDefault: isFirst
+        };
 
         onUpdate({
             ...settings,
-            industries: [...settings.industries, { code: lowerCode, label }]
+            industries: [...settings.industries, newInd]
         });
         setCode('');
         setLabel('');
     };
 
     const remove = (targetCode: string) => {
-        if (targetCode === DEFAULT_IND.code) return;
-        onUpdate({
-            ...settings,
-            industries: settings.industries.filter(i => i.code !== targetCode)
-        });
+        const updated = settings.industries.filter(i => i.code !== targetCode);
+
+        // Safety: ensure one default remains
+        if (updated.length > 0 && !updated.find(i => i.isDefault)) {
+            updated[0].isDefault = true;
+        }
+
+        onUpdate({ ...settings, industries: updated });
     };
 
     const updateMatches = (targetCode: string, matches: string[]) => {
@@ -41,6 +53,14 @@ export default function IndustryTab({ settings, onUpdate }: IndustryTabProps) {
             ...settings,
             industries: settings.industries.map(i => i.code === targetCode ? { ...i, matches } : i)
         });
+    };
+
+    const setDefault = (targetCode: string) => {
+        const updated = settings.industries.map(i => ({
+            ...i,
+            isDefault: i.code === targetCode
+        }));
+        onUpdate({ ...settings, industries: updated });
     };
 
     return (
@@ -61,6 +81,18 @@ export default function IndustryTab({ settings, onUpdate }: IndustryTabProps) {
             {/* List */}
             <div className="flex-grow-1 overflow-auto border-1 surface-border border-round">
                 <DataTable value={settings.industries} size="small" className="p-datatable-sm">
+                    <Column
+                        header="Default"
+                        body={(row) => (
+                            <div className="flex justify-content-center">
+                                <RadioButton
+                                    checked={!!row.isDefault}
+                                    onChange={() => setDefault(row.code)}
+                                />
+                            </div>
+                        )}
+                        style={{ width: '4rem', textAlign: 'center' }}
+                    />
                     <Column field="code" header="Key" style={{ width: '15%' }} body={(row) => <span className="font-mono text-sm">{row.code}</span>} />
                     <Column field="label" header="Label" style={{ width: '25%' }} />
                     <Column header="HubSpot Mappings" body={(row) => (
@@ -73,9 +105,16 @@ export default function IndustryTab({ settings, onUpdate }: IndustryTabProps) {
                         />
                     )} />
                     <Column body={(row) => (
-                        row.code !== DEFAULT_IND.code && (
-                            <Button icon="pi pi-trash" text severity="danger" size="small" onClick={() => remove(row.code)} />
-                        )
+                        <Button
+                            icon="pi pi-trash"
+                            text
+                            severity="danger"
+                            size="small"
+                            onClick={() => remove(row.code)}
+                            disabled={row.isDefault}
+                            tooltip={row.isDefault ? "Cannot delete default" : "Delete"}
+                            tooltipOptions={{ position: 'left' }}
+                        />
                     )} style={{ width: '50px' }} />
                 </DataTable>
             </div>

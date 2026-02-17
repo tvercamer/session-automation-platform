@@ -4,7 +4,7 @@ import { TabView, TabPanel } from 'primereact/tabview';
 import { Toast } from 'primereact/toast';
 import { Button } from 'primereact/button';
 
-import { type AppSettings, DEFAULT_LANG, DEFAULT_IND } from '../../types/settings';
+import { type AppSettings } from '../../types/settings';
 import GeneralTab from './GeneralTab';
 import LanguageTab from './LanguageTab';
 import IndustryTab from './IndustryTab';
@@ -31,13 +31,6 @@ export default function SettingsDialog({ visible, onHide, onSettingsChanged }: S
                 // Ensure defaults exist
                 if (!data.languages) data.languages = [];
                 if (!data.industries) data.industries = [];
-
-                if (!data.languages.find((l: any) => l.code === DEFAULT_LANG.code)) {
-                    data.languages.unshift(DEFAULT_LANG);
-                }
-                if (!data.industries.find((i: any) => i.code === DEFAULT_IND.code)) {
-                    data.industries.unshift(DEFAULT_IND);
-                }
                 setSettings(data);
             });
         }

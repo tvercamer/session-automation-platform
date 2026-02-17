@@ -2,6 +2,7 @@ export interface KeyLabel {
     code: string;
     label: string;
     matches?: string[];
+    isDefault?: boolean;
 }
 
 export interface AppSettings {
@@ -24,6 +25,3 @@ export interface TransRow {
     key: string;
     [langCode: string]: string;
 }
-
-export const DEFAULT_LANG: KeyLabel = { code: 'EN', label: 'English' };
-export const DEFAULT_IND: KeyLabel = { code: 'gen', label: 'Generic' };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { KeyLabel, Customer } from "../types/session";
 
-export function useConfigurationData() {
+export function useConfigurationData(refreshTrigger: number = 0) {
     const [languages, setLanguages] = useState<KeyLabel[]>([]);
     const [industries, setIndustries] = useState<KeyLabel[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -42,7 +42,7 @@ export function useConfigurationData() {
         load().then();
 
         return () => { isMounted = false; };
-    }, []);
+    }, [refreshTrigger]);
 
     return { languages, industries, customers, loading };
 }

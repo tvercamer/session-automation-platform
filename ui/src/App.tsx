@@ -1,87 +1,96 @@
-import { handleQuit, handleHelp, handleToggleDev, handleFullScreen } from './utils/electron-bridge.ts';
-import SettingsDialog from "./components/Settings/SettingsDialog.tsx";
-import ConsolePanel from './components/ConsolePanel/ConsolePanel.tsx';
 import { useState, useEffect, useRef } from 'react';
-import type { TreeNode } from 'primereact/treenode';
-import Workspace from "./components/Workspace.tsx";
-import type { Section, SessionSettings } from "./types/session.ts";
-import AppMenu from "./components/AppMenu.tsx";
 import { Toast } from 'primereact/toast';
+import type { TreeNode } from 'primereact/treenode';
+
+// Components
+import AppMenu from "./components/AppMenu";
+import Workspace from "./components/Workspace";
+import ConsolePanel from './components/ConsolePanel/ConsolePanel';
+import SettingsDialog from "./components/Settings/SettingsDialog";
+
+// Utils & Types
+import { handleQuit, handleHelp, handleToggleDev, handleFullScreen } from './utils/electron-bridge';
+import type { Section, SessionSettings } from "./types/session";
 
 export default function App() {
     /* ------------------------------------------------------------------------------------
-     * STATE MANAGEMENT
+     * STATE
      * --------------------------------------------------------------------------------- */
-
     const toast = useRef<Toast>(null);
 
-    // ----- VIEWS
+    // UI State
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-    const handleSettings = () => {
-        setIsSettingsVisible(true);
-    };
+    const [isLibraryLoading, setIsLibraryLoading] = useState(false);
 
-    // ----- Session Settings
+    // Data Versioning (Triggers re-fetches in children)
+    const [configRefreshTrigger, setConfigRefreshTrigger] = useState(0);
+
+    // Session Data
+    const [libraryNodes, setLibraryNodes] = useState<TreeNode[]>([]);
+    const [sections, setSections] = useState<Section[]>([
+        { id: 'intro', title: 'Introduction', isLocked: true, items: [] },
+        { id: 'outro', title: 'Outro', isLocked: true, items: [] }
+    ]);
+
+    // Configuration Data
     const [sessionSettings, setSessionSettings] = useState<SessionSettings>({
         sessionName: '',
         customer: null,
-        date: new Date(Date.now() + 14*24*60*60*1000), // Default +14 days
+        date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // Default: +14 days
         industry: null,
         language: null
     });
 
-    const handleSessionSettingsChange = (field: keyof SessionSettings, value: any) => {
-        setSessionSettings(prev => ({ ...prev, [field]: value }));
-    };
-
-    // ----- Library Settings
-    const [libraryNodes, setLibraryNodes] = useState<TreeNode[]>([]);
-    const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+    /* ------------------------------------------------------------------------------------
+     * LOGIC
+     * --------------------------------------------------------------------------------- */
 
     const loadLibrary = async () => {
         setIsLibraryLoading(true);
         try {
-            console.log("Fetching library...");
             const data = await window.electronAPI.getLibrary();
-            console.log("Library data received:", data);
             setLibraryNodes(data);
         } catch (e) {
             console.error("Failed to load library", e);
             toast.current?.show({
                 severity: 'error',
-                summary: 'Error',
-                detail: 'Could not refresh library.'
+                summary: 'Library Error',
+                detail: 'Could not refresh library files. Check your settings path.'
             });
         } finally {
             setIsLibraryLoading(false);
         }
     };
 
+    // Initial Load
     useEffect(() => {
         loadLibrary();
     }, []);
 
-    // ----- Playlist Settings
-    const [sections, setSections] = useState<Section[]>([
-        { id: 'intro', title: 'Introduction', isLocked: true, items: [] },
-        { id: 'outro', title: 'Outro', isLocked: true, items: [] }
-    ]);
+    const handleSessionSettingsChange = (field: keyof SessionSettings, value: any) => {
+        setSessionSettings(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSettingsSaved = () => {
+        loadLibrary().then();
+        setConfigRefreshTrigger(prev => prev + 1);
+    };
 
     /* ------------------------------------------------------------------------------------
-     * RENDERING
+     * RENDER
      * --------------------------------------------------------------------------------- */
     return (
-        <div className='flex flex-column h-screen overflow-hidden text-white'>
+        <div className='flex flex-column h-screen overflow-hidden surface-ground text-gray-200 font-sans'>
             <Toast ref={toast} />
 
             <SettingsDialog
                 visible={isSettingsVisible}
                 onHide={() => setIsSettingsVisible(false)}
-                onSettingsChanged={loadLibrary}
+                onSettingsChanged={handleSettingsSaved}
             />
 
             <AppMenu
-                onSettings={handleSettings}
+                onSettings={() => setIsSettingsVisible(true)}
                 onQuit={handleQuit}
                 onFullScreen={handleFullScreen}
                 onToggleDev={handleToggleDev}
@@ -89,11 +98,17 @@ export default function App() {
             />
 
             <Workspace
+                // Configuration Props
                 settings={sessionSettings}
                 onSettingChange={handleSessionSettingsChange}
+                refreshTrigger={configRefreshTrigger}
+
+                // Library Props
                 libraryNodes={libraryNodes}
-                isLibraryLoading={isLibraryLoading} // Nieuw: Geef loading state door
-                onLibraryRefresh={loadLibrary}      // Nieuw: Geef refresh functie door
+                isLibraryLoading={isLibraryLoading}
+                onLibraryRefresh={loadLibrary}
+
+                // Playlist Props
                 sections={sections}
                 setSections={setSections}
             />

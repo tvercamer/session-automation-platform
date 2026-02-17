@@ -9,6 +9,7 @@ import PlaylistPanel from './PlaylistPanel/PlaylistPanel';
 interface WorkspaceProps {
     settings: SessionSettings;
     onSettingChange: (field: keyof SessionSettings, value: any) => void;
+    refreshTrigger: number;
     libraryNodes: TreeNode[];
     isLibraryLoading: boolean;
     onLibraryRefresh: () => void;
@@ -18,7 +19,7 @@ interface WorkspaceProps {
 
 export default function Workspace(props: WorkspaceProps) {
     const {
-        settings, onSettingChange,
+        settings, onSettingChange, refreshTrigger,
         libraryNodes, isLibraryLoading, onLibraryRefresh,
         sections, setSections
     } = props;
@@ -33,6 +34,7 @@ export default function Workspace(props: WorkspaceProps) {
                     <ConfigurationPanel
                         settings={settings}
                         onChange={onSettingChange}
+                        refreshTrigger={refreshTrigger}
                     />
                 </SplitterPanel>
 

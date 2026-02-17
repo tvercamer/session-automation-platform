@@ -9,11 +9,12 @@ import type { SessionSettings, Customer } from "../types/session";
 interface ConfigurationPanelProps {
     settings: SessionSettings;
     onChange: (field: keyof SessionSettings, value: any) => void;
+    refreshTrigger: number;
 }
 
-export default function ConfigurationPanel({ settings, onChange }: ConfigurationPanelProps) {
+export default function ConfigurationPanel({ settings, onChange, refreshTrigger }: ConfigurationPanelProps) {
     const { sessionName, customer, date, industry, language } = settings;
-    const { languages, industries, customers, loading } = useConfigurationData();
+    const { languages, industries, customers, loading } = useConfigurationData(refreshTrigger);
 
     // --- 1. HANDLING DEFAULTS ---
     // Runs when data loads. If no selection exists, pick the one marked 'isDefault' or the first one.

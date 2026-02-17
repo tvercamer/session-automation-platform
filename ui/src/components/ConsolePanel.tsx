@@ -4,9 +4,26 @@ import { Button } from 'primereact/button';
 interface LogEntry {
     time: string;
     level: string;
-    msg: string;
+    message: string;
     color: string;
 }
+
+const getLogColor = (level?: string): string => {
+    const lvl = level?.toUpperCase() || 'INFO';
+    switch (lvl) {
+        case 'INFO': return '#60a5fa';      // Blue-400
+        case 'SUCCESS': return '#4ade80';   // Green-400
+        case 'WARN':
+        case 'WARNING': return '#facc15';   // Yellow-400
+        case 'ERROR':
+        case 'CRITICAL': return '#f87171';  // Red-400
+        case 'DEBUG': return '#4ade80';     // Green-400
+        case 'SYSTEM': return '#c084fc';    // Purple-400
+        default: return '#9ca3af';          // Gray-400
+    }
+};
+
+const MAX_LOGS = 500;
 
 export default function ConsolePanel() {
     const [isCollapsed, setIsCollapsed] = useState(true);
@@ -14,49 +31,39 @@ export default function ConsolePanel() {
         {
             time: new Date().toLocaleTimeString('en-GB'),
             level: 'SYSTEM',
-            msg: 'Console ready.',
-            color: '#8888ff'
+            message: 'Console ready.',
+            color: getLogColor('SYSTEM')
         }
     ]);
 
-    // Reference for auto-scrolling
     const logContainerRef = useRef<HTMLDivElement>(null);
 
     // --- 1. SUBSCRIBE TO LOGS ---
     useEffect(() => {
         const handleLog = (data: any) => {
-            // Determine color based on level
-            let color = '#a0a0a0'; // Default gray
-            const lvl = data.level?.toUpperCase() || 'INFO';
+            const level = data.level?.toUpperCase() || 'INFO';
 
-            if (lvl === 'INFO') color = '#8888ff';      // Blue-ish
-            if (lvl === 'SUCCESS') color = '#4caf50';   // Green
-            if (lvl === 'WARN' || lvl === 'WARNING') color = '#ffcc00';      // Yellow
-            if (lvl === 'ERROR' || lvl === 'CRITICAL') color = '#ff4444';     // Red
-            if (lvl === 'DEBUG') color = '#00ff00';     // Matrix Green
+            // Filter out Uvicorn access logs
+            if (data.message && data.message.includes("GET /") && level === 'INFO') {
+                return;
+            }
 
-            const newLog = {
+            const newLog: LogEntry = {
                 time: data.timestamp || new Date().toLocaleTimeString('en-GB'),
-                level: lvl,
-                msg: data.message || '',
-                color: color
+                level: level,
+                message: data.message || data.msg || '',
+                color: getLogColor(level)
             };
 
             setLogs(prev => {
-                // Keep max 500 logs to prevent memory issues
                 const updated = [...prev, newLog];
-                if (updated.length > 500) return updated.slice(-500);
+                if (updated.length > MAX_LOGS) return updated.slice(-MAX_LOGS);
                 return updated;
             });
         };
 
-        // Connect listener
-        // The cleanup function returned by onConsoleLog removes the listener
-        const cleanup = window.electronAPI.onConsoleLog(handleLog);
-
-        return () => {
-            cleanup();
-        };
+        const removeListener = window.electronAPI.onConsoleLog(handleLog);
+        return () => { if (removeListener) removeListener(); };
     }, []);
 
     // --- 2. AUTO-SCROLL ---
@@ -66,40 +73,59 @@ export default function ConsolePanel() {
         }
     }, [logs, isCollapsed]);
 
-    const lastLog = logs.length > 0 ? logs[logs.length - 1] : { level: '...', msg: '...', color: '#fff' };
+    const lastLog = logs.length > 0 ? logs[logs.length - 1] : { level: '...', message: '...', color: '#9ca3af', time: '' };
 
     return (
-        <div className={`surface-ground flex flex-column transition-all transition-duration-300 ${isCollapsed ? 'h-3rem' : 'h-15rem'}`}>
+        <div className={`flex flex-column transition-all transition-duration-300 surface-ground ${isCollapsed ? 'h-3rem' : 'h-15rem'}`}>
 
             {/* HEADER */}
-            <div className="flex align-items-center justify-content-between p-2 px-3 bg-header text-gray-200 h-3rem border-bottom-1 surface-border">
+            <div
+                className="flex align-items-center justify-content-between p-2 px-3 bg-header cursor-pointer"
+                style={{ height: '3rem' }}
+                onClick={() => setIsCollapsed(!isCollapsed)}
+            >
                 <div className="flex align-items-center overflow-hidden w-full mr-2">
                     {isCollapsed ? (
-                        <div className="flex align-items-center text-sm font-monospace text-gray-400 white-space-nowrap overflow-hidden text-overflow-ellipsis">
-                            <span className="font-bold mr-2" style={{ color: lastLog.color }}>[{lastLog.level}]</span>
-                            <span>{lastLog.msg}</span>
+                        // COLLAPSED: [LEVEL]Message (No gap)
+                        <div className="flex align-items-center text-sm font-monospace white-space-nowrap overflow-hidden text-overflow-ellipsis w-full">
+                            <span
+                                className="font-bold text-xs"
+                                style={{ color: lastLog.color }}
+                            >
+                                {lastLog.level}
+                            </span>
+                            <span className="text-gray-400 text-overflow-ellipsis overflow-hidden ml-1">
+                                {lastLog.message}
+                            </span>
                         </div>
                     ) : (
-                        <span className="font-bold text-sm">Console Output</span>
+                        // EXPANDED TITLE
+                        <div className="flex align-items-center gap-2 text-gray-200">
+                            <i className="pi pi-terminal"></i>
+                            <span className="font-bold text-sm">System Console</span>
+                        </div>
                     )}
                 </div>
 
-                <div className="flex gap-2">
+                {/* CONTROLS */}
+                <div className="flex gap-1 align-items-center">
                     {!isCollapsed && (
                         <Button
                             icon="pi pi-trash"
                             text rounded
-                            className="h-2rem w-2rem text-gray-400 hover:text-white p-0"
+                            className="h-2rem w-2rem text-gray-400 hover:text-white"
                             tooltip="Clear Console"
-                            onClick={() => setLogs([])}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setLogs([]);
+                            }}
                         />
                     )}
+                    {/* Using Button for Chevron to ensure perfect alignment with Trash bin */}
                     <Button
-                        icon={`pi ${isCollapsed ? 'pi-chevron-up' : 'pi-chevron-down'}`}
-                        text
-                        rounded
-                        className="h-2rem w-2rem text-gray-400 hover:text-white p-0"
-                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        icon={`pi ${isCollapsed ? 'pi-chevron-down' : 'pi-chevron-up'}`}
+                        text rounded
+                        className="h-2rem w-2rem text-gray-400 hover:text-white"
                     />
                 </div>
             </div>
@@ -108,22 +134,33 @@ export default function ConsolePanel() {
             {!isCollapsed && (
                 <div
                     ref={logContainerRef}
-                    className="flex-grow-1 p-2 font-monospace text-sm overflow-y-auto custom-scrollbar select-text"
-                    style={{ backgroundColor: '#1e1e1e' }} // Slightly darker background for logs
+                    className="flex-grow-1 p-2 font-monospace text-sm overflow-y-auto custom-scrollbar select-text surface-ground"
                 >
-                    {logs.map((log, index) => {
-                        return (
-                            <div
-                                key={index}
-                                className="mb-1 p-0 flex align-items-start"
-                                style={{ lineHeight: '1.4' }}
+                    {logs.map((log, index) => (
+                        <div
+                            key={index}
+                            className="mb-1 flex align-items-center border-round-xs px-2 py-0"
+                            style={{ lineHeight: '1.4' }}
+                        >
+                            {/* TIME (Fixed width, margin right) */}
+                            <span className="text-gray-500 text-xs select-none w-5rem flex-shrink-0">
+                                {log.time}
+                            </span>
+
+                            {/* LEVEL (Fixed width, margin right) */}
+                            <span
+                                className="font-bold text-xs select-none w-5rem flex-shrink-0"
+                                style={{ color: log.color }}
                             >
-                                <span className="text-gray-600 mr-2 flex-shrink-0" style={{ fontSize: '0.8rem' }}>[{log.time}]</span>
-                                <span style={{ color: log.color }} className="font-bold mr-2 flex-shrink-0 w-4rem text-right">{log.level}:</span>
-                                <span className="text-gray-300 white-space-pre-wrap word-break-all">{log.msg}</span>
-                            </div>
-                        );
-                    })}
+                                {log.level}
+                            </span>
+
+                            {/* MESSAGE */}
+                            <span className="text-gray-300 white-space-pre-wrap word-break-all flex-1">
+                                {log.message}
+                            </span>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

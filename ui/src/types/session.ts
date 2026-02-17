@@ -16,6 +16,7 @@ export interface KeyLabel {
     code: string;
     label: string;
     matches?: string[];
+    isDefault?: boolean;
 }
 
 export interface Customer {

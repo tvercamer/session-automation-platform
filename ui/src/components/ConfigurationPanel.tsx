@@ -1,138 +1,84 @@
-import { useState, useEffect } from 'react';
-import type { SessionSettings } from "../types/session.ts";
+import { useEffect } from 'react';
 import { InputText } from 'primereact/inputtext';
-import { Dropdown } from 'primereact/dropdown';
+import { Dropdown, type DropdownChangeEvent } from 'primereact/dropdown';
 import { Calendar } from 'primereact/calendar';
+
+import { useConfigurationData } from '../hooks/useConfigurationData';
+import type { SessionSettings, Customer } from "../types/session";
 
 interface ConfigurationPanelProps {
     settings: SessionSettings;
     onChange: (field: keyof SessionSettings, value: any) => void;
 }
 
-// Interfaces must match session.ts
-interface KeyLabel {
-    code: string;
-    label: string;
-    matches?: string[];
-}
-
-interface Customer {
-    name: string;
-    code: string;
-    industry?: string;
-}
-
-const DEFAULT_LANG: KeyLabel = { code: 'EN', label: 'English' };
-const DEFAULT_IND: KeyLabel = { code: 'gen', label: 'Generic' };
-
 export default function ConfigurationPanel({ settings, onChange }: ConfigurationPanelProps) {
     const { sessionName, customer, date, industry, language } = settings;
+    const { languages, industries, customers, loading } = useConfigurationData();
 
-    // --- STATE ---
-    const [availableLanguages, setAvailableLanguages] = useState<KeyLabel[]>([DEFAULT_LANG]);
-    const [availableIndustries, setAvailableIndustries] = useState<KeyLabel[]>([DEFAULT_IND]);
-    const [availableCustomers, setAvailableCustomers] = useState<Customer[]>([]);
-    const [loadingCustomers, setLoadingCustomers] = useState(false);
-
-    // --- LOAD DATA ---
+    // --- 1. HANDLING DEFAULTS ---
+    // Runs when data loads. If no selection exists, pick the one marked 'isDefault' or the first one.
     useEffect(() => {
-        let isMounted = true;
+        if (loading) return;
 
-        async function loadData() {
-            try {
-                // 1. SETTINGS
-                const appSettings = await window.electronAPI.getSettings();
-                let langs: KeyLabel[] = appSettings.languages || [];
-                let inds: KeyLabel[] = appSettings.industries || [];
-
-                if (!langs.find(l => l.code === DEFAULT_LANG.code)) langs.unshift(DEFAULT_LANG);
-                if (!inds.find(i => i.code === DEFAULT_IND.code)) inds.unshift(DEFAULT_IND);
-
-                if (isMounted) {
-                    setAvailableLanguages(langs);
-                    setAvailableIndustries(inds);
-
-                    // Auto-select Defaults if empty
-                    if (!language || !language.code) {
-                        onChange('language', langs.find(l => l.code === 'EN') || langs[0]);
-                    }
-                    if (!industry || !industry.code) {
-                        onChange('industry', inds.find(i => i.code === 'gen') || inds[0]);
-                    }
-                }
-
-                // 2. HUBSPOT CUSTOMERS
-                if (isMounted) setLoadingCustomers(true);
-                let companies: Customer[] = [];
-                try {
-                    companies = await window.electronAPI.getHubspotCompanies();
-                } catch (err) {
-                    console.warn("HubSpot API call failed", err);
-                }
-
-                if (isMounted) {
-                    if (companies && companies.length > 0) {
-                        setAvailableCustomers(companies);
-                    } else {
-                        setAvailableCustomers([
-                            { name: 'Acme Corp (Local)', code: 'ACME' },
-                            { name: 'Globex (Local)', code: 'GLBX' }
-                        ]);
-                    }
-                    setLoadingCustomers(false);
-                }
-
-            } catch (e) {
-                console.error("Failed to load configuration data", e);
-                if (isMounted) setLoadingCustomers(false);
-            }
+        if (!language && languages.length > 0) {
+            const defaultLang = languages.find(l => l.isDefault) || languages[0];
+            onChange('language', defaultLang);
         }
-        loadData();
 
-        return () => { isMounted = false; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        if (!industry && industries.length > 0) {
+            const defaultInd = industries.find(i => i.isDefault) || industries[0];
+            onChange('industry', defaultInd);
+        }
+    }, [loading, languages, industries, language, industry]); // removed onChange to prevent loop
 
-    // --- AUTO-MAPPING LOGIC ---
+    // --- 2. MAPPING LOGIC ---
+    const findIndustryMatch = (hubspotValue?: string) => {
+        if (!hubspotValue) return null;
+        return industries.find(ind => ind.matches?.includes(hubspotValue));
+    };
+
     const handleCustomerChange = (newCustomer: Customer | null) => {
-        // 1. Always update the customer selection first
         onChange('customer', newCustomer);
 
-        // 2. Determine the HubSpot industry (if any)
-        const hubspotIndustry = newCustomer?.industry;
+        if (newCustomer?.industry) {
+            const match = findIndustryMatch(newCustomer.industry);
 
-        console.log(`Attempting to map HubSpot industry: "${hubspotIndustry}"`);
-
-        // 3. Find a match in our internal industry list
-        let matchedIndustry = null;
-
-        if (hubspotIndustry) {
-            matchedIndustry = availableIndustries.find(ind =>
-                ind.matches && ind.matches.includes(hubspotIndustry)
-            );
-        }
-
-        // 4. Apply Logic: Match OR Fallback
-        if (matchedIndustry) {
-            console.log(`Found match! Setting industry to: ${matchedIndustry.label}`);
-            onChange('industry', matchedIndustry);
-        } else {
-            console.log("No mapping found. Reverting to Default (Generic).");
-            // Find the default 'gen' industry in our available list
-            const defaultInd = availableIndustries.find(i => i.code === 'gen') || availableIndustries[0];
-            if (defaultInd) {
-                onChange('industry', defaultInd);
+            if (match) {
+                // If we found a mapped internal industry, select it
+                onChange('industry', match);
+            } else {
+                // Fallback: If HubSpot has an industry we don't know,
+                // revert to the default internal industry (usually 'Generic')
+                const def = industries.find(i => i.isDefault) || industries[0];
+                if (def) onChange('industry', def);
             }
         }
     };
 
+    // --- TEMPLATES ---
+    const customerTemplate = (option: Customer) => {
+        if (!option) return <span>Select a Customer</span>;
+        const mappedIndustry = findIndustryMatch(option.industry);
+        const displayLabel = mappedIndustry ? mappedIndustry.label : option.industry;
 
-    // --- RENDER HELPERS ---
-    const selectedLanguage = availableLanguages.find(l => l.code === language?.code) || language;
-    const selectedIndustry = availableIndustries.find(i => i.code === industry?.code) || industry;
+        return (
+            <div className="flex flex-column">
+                <span className="font-medium">{option.name}</span>
+                {option.industry && (
+                    <div className="flex align-items-center gap-2 text-xs text-gray-500">
+                        <span>{displayLabel}</span>
+                        {mappedIndustry && (
+                            <i className="pi pi-link text-blue-400" style={{ fontSize: '0.7rem' }} title="Mapped to internal industry"></i>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
-        <div className="flex-1 surface-ground flex flex-column h-full surface-border">
+        <div className="flex-1 surface-ground flex flex-column h-full">
+            {/* HEADER */}
             <div className="flex align-items-center p-2 px-3 bg-header" style={{ height: '3rem' }}>
                 <span className="font-bold text-sm text-gray-200">Session Configuration</span>
             </div>
@@ -141,79 +87,72 @@ export default function ConfigurationPanel({ settings, onChange }: Configuration
 
                 {/* Session Name */}
                 <div className="flex flex-column gap-2">
-                    <label htmlFor="sname" className="text-xs font-medium text-gray-400">SESSION NAME</label>
+                    <label htmlFor="sname" className="text-xs font-bold text-gray-400">SESSION NAME</label>
                     <InputText
                         id="sname"
                         value={sessionName}
                         onChange={(e) => onChange('sessionName', e.target.value)}
                         placeholder="e.g. Q1 Review"
-                        className="p-inputtext-sm"
+                        className="p-inputtext-sm w-full"
                     />
                 </div>
 
                 {/* Customer (HubSpot) */}
                 <div className="flex flex-column gap-2">
-                    <label className="text-xs font-medium text-gray-400">CUSTOMER</label>
+                    <label className="text-xs font-bold text-gray-400">CUSTOMER</label>
                     <Dropdown
                         value={customer}
-                        // --- THE FIX IS HERE ---
-                        // We now call our custom handler instead of passing data directly to onChange
-                        onChange={(e) => handleCustomerChange(e.value)}
-                        // -----------------------
-                        options={availableCustomers}
+                        onChange={(e: DropdownChangeEvent) => handleCustomerChange(e.value)}
+                        options={customers}
                         optionLabel="name"
                         filter
-                        placeholder={loadingCustomers ? "Loading Companies..." : "Select a Customer"}
-                        disabled={loadingCustomers}
-                        className="p-inputtext-sm"
-                        emptyMessage="No companies found"
-                        itemTemplate={(option) => (
-                            <div className="flex flex-column">
-                                <span>{option.name}</span>
-                                {option.industry && <span className="text-xs text-gray-400">{option.industry}</span>}
-                            </div>
-                        )}
+                        placeholder={loading ? "Loading..." : "Select a Customer"}
+                        disabled={loading}
+                        className="p-inputtext-sm w-full"
+                        emptyMessage="No customers found"
+                        itemTemplate={customerTemplate}
+                        valueTemplate={customerTemplate}
                     />
                 </div>
 
                 {/* Date */}
                 <div className="flex flex-column gap-2">
-                    <label className="text-xs font-medium text-gray-400">DATE</label>
+                    <label className="text-xs font-bold text-gray-400">DATE</label>
                     <Calendar
                         value={date}
                         onChange={(e) => onChange('date', e.value)}
                         showIcon
                         dateFormat="yy-mm-dd"
-                        className="p-inputtext-sm"
+                        className="p-inputtext-sm w-full"
                     />
                 </div>
 
                 {/* Industry */}
                 <div className="flex flex-column gap-2">
-                    <label className="text-xs font-medium text-gray-400">INDUSTRY</label>
+                    <label className="text-xs font-bold text-gray-400">INDUSTRY</label>
                     <Dropdown
-                        value={selectedIndustry}
-                        onChange={(e) => onChange('industry', e.value)}
-                        options={availableIndustries}
+                        value={industry}
+                        onChange={(e: DropdownChangeEvent) => onChange('industry', e.value)}
+                        options={industries}
                         optionLabel="label"
                         dataKey="code"
                         placeholder="Select Industry"
-                        className="p-inputtext-sm"
+                        className="p-inputtext-sm w-full"
                         emptyMessage="No industries configured"
                     />
                 </div>
 
                 {/* Language */}
                 <div className="flex flex-column gap-2">
-                    <label className="text-xs font-medium text-gray-400">LANGUAGE</label>
+                    <label className="text-xs font-bold text-gray-400">LANGUAGE</label>
                     <Dropdown
-                        value={selectedLanguage}
-                        onChange={(e) => onChange('language', e.value)}
-                        options={availableLanguages}
+                        value={language}
+                        onChange={(e: DropdownChangeEvent) => onChange('language', e.value)}
+                        options={languages}
                         optionLabel="label"
                         dataKey="code"
                         placeholder="Select Language"
-                        className="p-inputtext-sm"
+                        className="p-inputtext-sm w-full"
                         emptyMessage="No languages configured"
                     />
                 </div>

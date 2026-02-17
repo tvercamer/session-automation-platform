@@ -1,113 +1,177 @@
-/* Reset & Base */
+/* =========================================
+   1. VARIABLES & THEME (Restored Your Palette)
+   ========================================= */
+:root {
+  --surface-ground: #171f21 !important; /* Your specific Dark Panel BG */
+  --surface-border: #283030 !important; /* Your specific Border Color */
+  --input-bg: #222b2d !important;
+  --input-border: #283030 !important;
+
+  /* Core Backgrounds */
+  --bg-app: #09090b;          /* Deep Black (Window Background/Gaps) */
+  --bg-header: #283030;       /* Matching Header to Border/Panel */
+
+  /* Text & Accents */
+  --primary-color: #60a5fa;
+  --text-color: #e4e4e7;
+  --text-secondary: #a1a1aa;
+}
+
+/* =========================================
+   2. RESET & BASE
+   ========================================= */
 html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
   width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #09090b; /* Deep Black (Window Background/Gaps) */
+  background-color: var(--bg-app);
+  color: var(--text-color);
+  overflow: hidden;
 }
 
-:root {
-  --surface-ground: #171f21 !important; /* Panel Background (Lighter) */
-  --surface-border: #283030 !important; /* Borders */
-  --input-bg: #222b2d;
-  --input-border: #283030;
-}
+/* Custom Utility Classes */
+.bg-header { background-color: var(--surface-border) !important; } /* Use border color for header distinction */
+.surface-ground { background-color: var(--surface-ground) !important; }
+.surface-card { background-color: var(--surface-ground) !important; } /* Cards match ground in your theme */
+.surface-hover:hover { background-color: #2c3537 !important; } /* Slightly lighter than #171f21 */
 
-/* 1. LAYOUT & GAPS */
+/* =========================================
+   3. LAYOUT (Splitter & Menu)
+   ========================================= */
+
+/* Transparent Splitter to let black gaps show */
 .p-splitter {
   border: none !important;
-  background: transparent !important; /* Transparent to let black background show */
+  background: transparent !important;
 }
+
 .p-splitter-panel {
   background: var(--surface-ground) !important;
   padding: 0 !important;
 }
-/* The Gutter is now the "Gap" */
+
+/* The Gutter (Gap) */
 .p-splitter-gutter {
   background: transparent !important;
-  width: 8px !important; /* Physical width of the gap */
+  width: 8px !important;
 }
+
 .p-splitter-gutter-handle {
   display: none !important;
 }
-.bg-header {
-  background-color: var(--surface-border) !important;
-}
 
-/* 2. COMPACT MENU BAR */
+/* Menubar */
 .p-menubar {
-  padding: 2px 8px !important; /* Slim padding */
+  padding: 2px 8px !important;
   background: var(--surface-ground) !important;
   border: none !important;
   border-bottom: 1px solid var(--surface-border) !important;
+  border-radius: 0 !important;
   min-height: auto !important;
 }
+
 .p-menubar .p-menuitem-link {
   padding: 6px 12px !important;
 }
+
 .p-menubar .p-menuitem-text {
   font-size: 0.85rem !important;
 }
 
-/* 3. INPUTS (Compact) */
-.p-inputtext, .p-dropdown, .p-calendar {
-  width: 100% !important;
+/* =========================================
+   4. INPUTS & CONTROLS
+   ========================================= */
+.p-inputtext,
+.p-dropdown,
+.p-calendar {
+  width: 100%;
   background-color: var(--input-bg) !important;
   border: 1px solid var(--input-border) !important;
+  color: var(--text-color) !important;
   font-size: 0.9rem !important;
   border-radius: 4px !important;
   box-shadow: none !important;
   height: 36px !important;
 }
-.p-calendar .p-inputtext { border: none !important; background: transparent !important; height: 100% !important; padding: 0.5rem 0.75rem !important; }
+
+.p-calendar .p-inputtext {
+  border: none !important;
+  background: transparent !important;
+  height: 100% !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Dropdown fixes */
 .p-dropdown { padding: 0 !important; align-items: center; }
 .p-dropdown-trigger { width: 2.5rem !important; background: transparent !important; }
+.p-dropdown-panel { background: var(--surface-ground) !important; border: 1px solid var(--surface-border) !important; }
+.p-dropdown-item { color: var(--text-color) !important; }
+.p-dropdown-item.p-highlight { background: var(--surface-border) !important; color: var(--primary-color) !important; }
+.p-dropdown-item:hover { background: #2c3537 !important; }
 
+/* Buttons */
 .p-button {
   height: 36px !important;
   font-size: 0.9rem !important;
   padding: 0 1rem !important;
 }
 
-/* Reset radius for items inside a group */
+/* Input Group Rounded Corners Fix */
 .p-inputgroup .p-inputtext,
-.p-inputgroup .p-button {
-  border-radius: 0 !important;
-}
-
-/* Restore radius only on the outer edges */
+.p-inputgroup .p-button { border-radius: 0 !important; }
 .p-inputgroup .p-inputtext:first-child,
-.p-inputgroup .p-button:first-child {
-  border-top-left-radius: 4px !important;
-  border-bottom-left-radius: 4px !important;
-}
-
+.p-inputgroup .p-button:first-child { border-top-left-radius: 4px !important; border-bottom-left-radius: 4px !important; }
 .p-inputgroup .p-inputtext:last-child,
-.p-inputgroup .p-button:last-child {
-  border-top-right-radius: 4px !important;
-  border-bottom-right-radius: 4px !important;
-}
+.p-inputgroup .p-button:last-child { border-top-right-radius: 4px !important; border-bottom-right-radius: 4px !important; }
 
-/* Ensure button border matches input border color */
 .p-inputgroup .p-button {
   border: 1px solid var(--input-border) !important;
   border-left: none !important;
 }
 
-/* 4. SCROLLBARS */
+/* =========================================
+   5. TREE & LISTS
+   ========================================= */
+
+/* Library Tree */
+.p-tree {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.p-treenode-content {
+  padding: 2px !important;
+  border-radius: 4px;
+}
+.p-treenode-content:hover {
+  background-color: rgba(255,255,255,0.05) !important;
+}
+.p-treenode-content.p-highlight {
+  background-color: rgba(255,255,255,0.1) !important;
+  color: var(--primary-color) !important;
+}
+.p-tree .p-tree-toggler {
+  color: var(--text-secondary) !important;
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+
+/* --- FIX: Hide Default Tree Icons so we don't get double icons --- */
+.p-treenode-content .p-treenode-icon {
+  display: none !important;
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface-ground); }
 ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
 
-/* Hide OrderList buttons */
-.p-orderlist .p-orderlist-controls { display: none !important; }
-.p-orderlist .p-orderlist-list { padding: 0 !important; border: none !important; background: transparent !important; }
-.p-orderlist-item { background: transparent !important; color: inherit !important; padding: 0 !important; }
-.p-orderlist-item.p-highlight { background: transparent !important; color: inherit !important; }
-
-/* 5. SESSION PLAYLIST STYLING */
+/* =========================================
+   6. PLAYLIST & DRAG-DROP (Restored Dots)
+   ========================================= */
 
 /* Container for the dot - provides spacing but isn't clickable itself */
 .section-separator {
@@ -123,7 +187,7 @@ html, body, #root {
 .section-separator .dot {
   width: 8px;
   height: 8px;
-  background-color: #52525b; /* Visible Gray by default */
+  background-color: #52525b; /* Visible Gray */
   border-radius: 50%;
   transition: transform 0.2s, background-color 0.2s;
   cursor: pointer;
@@ -132,7 +196,7 @@ html, body, #root {
 
 .section-separator .dot:hover {
   transform: scale(1.5);
-  background-color: #60a5fa; /* Blue on hover */
+  background-color: var(--primary-color);
 }
 
 /* Section Containers */
@@ -143,22 +207,14 @@ html, body, #root {
   transition: border-color 0.2s;
 }
 
-.session-section.drag-over {
-  border-color: #60a5fa;
-  background-color: rgba(96, 165, 250, 0.1);
-}
-
 .session-section.locked {
-  border-style: dashed;
-  border-color: #3f3f46;
+  border-style: dashed !important;
+  border-color: #52525b !important;
+  opacity: 0.7;
 }
 
-/* --- Custom colors --- */
-.pi-file.text-orange-500 { color: #f97316 !important; } /* PowerPoint Orange */
-.pi-file.text-blue-500 { color: #3b82f6 !important; }   /* Word Blue */
-.pi-file-excel.text-green-500 { color: #22c55e !important; } /* Excel Green */
-.pi-file-pdf.text-red-500 { color: #ef4444 !important; } /* PDF Red */
-
-.p-treenode-content .p-treenode-icon {
-  display: none !important;
-}
+/* Custom file icon colors */
+.pi-file.text-orange-500 { color: #f97316 !important; }
+.pi-file.text-blue-500 { color: #3b82f6 !important; }
+.pi-file-excel.text-green-500 { color: #22c55e !important; }
+.pi-file-pdf.text-red-500 { color: #ef4444 !important; }

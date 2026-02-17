@@ -25,12 +25,14 @@ export function SortableFileItem({ item, onDelete, isLocked }: SortableFileItemP
         opacity: isDragging ? 0.5 : 1,
     };
 
-    // Helper to get icon based on type (simple version)
-    const getIcon = (type: string) => {
-        if (type.includes('pptx')) return 'pi-file text-orange-500';
-        if (type.includes('docx')) return 'pi-file text-blue-500';
-        if (type.includes('xlsx')) return 'pi-file-excel text-green-500';
-        return 'pi-file text-gray-500';
+    // Helper to get icon based on type
+    const getIconClass = (type: string) => {
+        const lowerType = type.toLowerCase();
+        if (lowerType.includes('pptx') || lowerType.includes('ppt')) return 'pi pi-file text-orange-500';
+        if (lowerType.includes('docx') || lowerType.includes('doc')) return 'pi pi-file-word text-blue-500';
+        if (lowerType.includes('xlsx') || lowerType.includes('xls')) return 'pi pi-file-excel text-green-500';
+        if (lowerType.includes('pdf')) return 'pi pi-file-pdf text-red-500';
+        return 'pi pi-file text-gray-500';
     };
 
     return (
@@ -39,12 +41,12 @@ export function SortableFileItem({ item, onDelete, isLocked }: SortableFileItemP
             style={style}
             {...attributes}
             {...listeners}
-            className="flex align-items-center p-2 surface-card border-1 surface-border border-round mb-2 hover:surface-hover cursor-move transition-colors"
+            className="flex align-items-center p-2 surface-card border-round mb-2 hover:surface-hover cursor-move transition-colors"
         >
-            <i className={`pi ${getIcon(item.fileType)} mr-2 text-lg`}></i>
+            <i className={`${getIconClass(item.fileType)} mr-2 text-lg`}></i>
 
             <div className="flex flex-column flex-grow-1 overflow-hidden">
-                <span className="text-gray-200 text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis">
+                <span className="text-gray-200 text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis select-none">
                     {item.name}
                 </span>
             </div>
@@ -53,8 +55,9 @@ export function SortableFileItem({ item, onDelete, isLocked }: SortableFileItemP
                 <Button
                     icon="pi pi-times"
                     rounded text
+                    severity="danger"
                     className="w-2rem h-2rem text-gray-500 hover:text-red-500"
-                    onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on delete
+                    onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on delete click
                     onClick={onDelete}
                 />
             )}

@@ -21,7 +21,7 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
     const [generating, setGenerating] = useState(false);
 
-    // NIEUW: Houdt het pad bij van de laatst gegenereerde sessie
+    // Track the path of the last generated session
     const [lastGeneratedPath, setLastGeneratedPath] = useState<string | null>(null);
 
     // Filter out Intro/Outro from the draggable list
@@ -107,24 +107,24 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
     // --- GENERATE HANDLER ---
     const handleGenerate = async () => {
-        // 1. Validatie
+        // 1. Validation
         if (!settings.customer || !settings.language || !settings.industry) {
             toast.current?.show({
                 severity: 'warn',
-                summary: 'Configuratie',
-                detail: 'Selecteer eerst een Klant, Industrie en Taal.'
+                summary: 'Configuration',
+                detail: 'Please select a Customer, Industry, and Language first.'
             });
             return;
         }
 
         setGenerating(true);
-        setLastGeneratedPath(null); // Resetten voor nieuwe run
+        setLastGeneratedPath(null); // Reset for new run
 
         // --- SAFE DATA EXTRACTION ---
         const getCustomerName = (c: any) => {
-            if (!c) return "Onbekende Klant";
+            if (!c) return "Unknown Customer";
             if (typeof c === 'string') return c;
-            return c.name || "Onbekende Klant";
+            return c.name || "Unknown Customer";
         };
 
         const getIndustryLabel = (i: any) => {
@@ -153,7 +153,7 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
 
         try {
             const result = await window.electronAPI.generateSession({
-                session_name: settings.sessionName || 'Sessie',
+                session_name: settings.sessionName || 'Session',
                 date: settings.date ? settings.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                 customer_name: getCustomerName(settings.customer),
                 customer_industry: getIndustryLabel(settings.industry),
@@ -162,24 +162,24 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
                 sections: sectionsPayload
             });
 
-            // --- DE FIX: Zorg dat we het resultaat opslaan ---
+            // Store the result
             if (result && result.status === 'success') {
-                console.log("Generatie succesvol, pad:", result.target_dir);
+                console.log("Generation successful, path:", result.target_dir);
                 setLastGeneratedPath(result.target_dir);
-                toast.current?.show({ severity: 'success', summary: 'Klaar!', detail: 'Sessie gegenereerd.' });
+                toast.current?.show({ severity: 'success', summary: 'Ready!', detail: 'Session generated.' });
             } else {
-                toast.current?.show({ severity: 'error', summary: 'Fout', detail: 'Geen pad ontvangen van backend.' });
+                toast.current?.show({ severity: 'error', summary: 'Error', detail: 'No path received from backend.' });
             }
 
         } catch (err) {
-            console.error("Fout tijdens genereren:", err);
-            toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Generatie mislukt. Zie console.' });
+            console.error("Error during generation:", err);
+            toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Generation failed. See console.' });
         } finally {
             setGenerating(false);
         }
     };
 
-    // --- PREVIEW HANDLER (NIEUW) ---
+    // --- PREVIEW HANDLER ---
     const handlePreview = () => {
         if (lastGeneratedPath) {
             window.electronAPI.openPath(lastGeneratedPath);
@@ -368,8 +368,8 @@ export default function PlaylistPanel({ sections, setSections, settings }: Playl
                 </div>
             </div>
 
-            {/* FOOTER: Actions */}
-            <div className="p-3 border-top-1 surface-border bg-gray-900 flex gap-2">
+            {/* FOOTER: Actions - Switched bg-gray-900 to surface-ground for styling consistency */}
+            <div className="p-3 border-top-1 surface-border surface-ground flex gap-2">
                 <Button
                     label={generating ? "Generating..." : "Generate Session"}
                     icon={generating ? "pi pi-spin pi-spinner" : "pi pi-cog"}

@@ -30,10 +30,7 @@ export function SortableSection({
                                 }: SortableSectionProps) {
 
     const [titleValue, setTitleValue] = useState(section.title);
-
-    // --- NEW: Local Collapse State ---
     const [isCollapsed, setIsCollapsed] = useState(false);
-
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -68,8 +65,9 @@ export function SortableSection({
     };
 
     const handleBlur = () => {
-        if (titleValue.trim()) {
-            onEditTitle(section.id, titleValue);
+        const val = titleValue.trim();
+        if (val) {
+            onEditTitle(section.id, val);
         } else {
             setTitleValue(section.title);
             onEditTitle(section.id, section.title);
@@ -78,27 +76,23 @@ export function SortableSection({
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
-        if (e.key === 'Enter') {
-            handleBlur();
-        }
+        if (e.key === 'Enter') handleBlur();
     };
 
-    // Toggle Collapse Handler
     const toggleCollapse = (e: React.MouseEvent) => {
-        e.stopPropagation(); // Prevent drag or edit start
+        e.stopPropagation();
         setIsCollapsed(!isCollapsed);
     };
 
     return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            data-section-id={section.id}
-        >
-            <div className={`session-section ${section.isLocked ? 'locked' : ''} surface-card border-1 surface-border border-round mb-2`}>
+        <div ref={setNodeRef} style={style} data-section-id={section.id}>
+
+            {/* Card Container - Removed borders, used surface-card */}
+            <div className={`session-section ${section.isLocked ? 'locked opacity-60' : ''} surface-card border-round mb-2`}>
 
                 {/* HEADER */}
-                <div className="flex align-items-center justify-content-between p-2 border-bottom-1 surface-border">
+                <div className="flex align-items-center justify-content-between p-2">
+
                     {/* LEFT: Drag Handle, Chevron, & Title */}
                     <div className="flex align-items-center gap-2 text-gray-200 flex-grow-1 overflow-hidden">
 
@@ -113,12 +107,13 @@ export function SortableSection({
                             ></i>
                         )}
 
-                        {/* --- NEW: COLLAPSE CHEVRON --- */}
+                        {/* Chevron */}
                         <i
                             className={`pi ${isCollapsed ? 'pi-chevron-right' : 'pi-chevron-down'} text-xs text-gray-500 cursor-pointer hover:text-white mr-1`}
                             onClick={toggleCollapse}
                         ></i>
 
+                        {/* Title */}
                         {isEditing ? (
                             <InputText
                                 ref={inputRef}
@@ -139,9 +134,10 @@ export function SortableSection({
                                 title="Click to edit"
                             >
                                 {section.title}
-                                {/* Optional: Show count if collapsed */}
                                 {isCollapsed && section.items.length > 0 && (
-                                    <span className="ml-2 text-xs text-gray-500 font-normal">({section.items.length} files)</span>
+                                    <span className="ml-2 text-xs text-gray-500 font-normal">
+                                        ({section.items.length} files)
+                                    </span>
                                 )}
                             </span>
                         )}
@@ -154,7 +150,7 @@ export function SortableSection({
                                 icon="pi pi-pencil"
                                 rounded text
                                 severity="secondary"
-                                className="w-2rem h-2rem text-gray-500"
+                                className="w-2rem h-2rem text-gray-500 hover:text-white"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onStartEditing();
@@ -164,14 +160,14 @@ export function SortableSection({
                                 icon="pi pi-trash"
                                 rounded text
                                 severity="danger"
-                                className="w-2rem h-2rem"
+                                className="w-2rem h-2rem text-gray-500 hover:text-red-500"
                                 onClick={(e) => onRemoveSection(e, section.id)}
                             />
                         </div>
                     )}
                 </div>
 
-                {/* ITEMS LIST (Hidden if collapsed) */}
+                {/* ITEMS LIST */}
                 {!isCollapsed && (
                     <div className="p-2 min-h-3rem">
                         <SortableContext
@@ -196,7 +192,7 @@ export function SortableSection({
                 )}
             </div>
 
-            {/* DOT SEPARATOR */}
+            {/* DOT SEPARATOR (Structure Preserved) */}
             <div className="section-separator" data-insert-index={sectionIndex + 1}>
                 <div
                     className="dot"

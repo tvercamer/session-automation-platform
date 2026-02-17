@@ -1,6 +1,6 @@
 import { handleQuit, handleHelp, handleToggleDev, handleFullScreen } from './utils/electron-bridge.ts';
 import SettingsDialog from "./components/SettingsDialog.tsx";
-import ConsolePanel from './components/ConsolePanel';
+import ConsolePanel from './components/ConsolePanel/ConsolePanel.tsx';
 import { useState, useEffect, useRef } from 'react';
 import type { TreeNode } from 'primereact/treenode';
 import Workspace from "./components/Workspace.tsx";

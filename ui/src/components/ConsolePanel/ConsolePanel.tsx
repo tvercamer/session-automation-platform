@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from 'primereact/button';
+import LogItem from "./LogItem.tsx";
 
-interface LogEntry {
+export interface LogEntry {
     time: string;
     level: string;
     message: string;
@@ -137,29 +138,7 @@ export default function ConsolePanel() {
                     className="flex-grow-1 p-2 font-monospace text-sm overflow-y-auto custom-scrollbar select-text surface-ground"
                 >
                     {logs.map((log, index) => (
-                        <div
-                            key={index}
-                            className="mb-1 flex align-items-center border-round-xs px-2 py-0"
-                            style={{ lineHeight: '1.4' }}
-                        >
-                            {/* TIME (Fixed width, margin right) */}
-                            <span className="text-gray-500 text-xs select-none w-5rem flex-shrink-0">
-                                {log.time}
-                            </span>
-
-                            {/* LEVEL (Fixed width, margin right) */}
-                            <span
-                                className="font-bold text-xs select-none w-5rem flex-shrink-0"
-                                style={{ color: log.color }}
-                            >
-                                {log.level}
-                            </span>
-
-                            {/* MESSAGE */}
-                            <span className="text-gray-300 white-space-pre-wrap word-break-all flex-1">
-                                {log.message}
-                            </span>
-                        </div>
+                        <LogItem key={index} log={log} />
                     ))}
                 </div>
             )}

@@ -12,24 +12,24 @@ interface LibraryPanelProps {
 export default function LibraryPanel({ nodes, onRefresh, loading = false }: LibraryPanelProps) {
 
     const handleDragStart = (e: React.DragEvent, node: TreeNode) => {
-        // Serialize node data to transfer it to the PlaylistPanel
-        // We ensure we pass the full node data (path, type, etc.)
-        e.dataTransfer.setData('application/json', JSON.stringify(node.data));
+        // PlaylistPanel expects JSON.parse(json).label AND JSON.parse(json).data
+        e.dataTransfer.setData('application/json', JSON.stringify(node));
         e.dataTransfer.effectAllowed = 'copy';
     };
 
     const nodeTemplate = (node: TreeNode, options: any) => {
         let iconClass = node.icon || 'pi pi-file text-gray-400';
 
+        // Visual cue for folders
         if (node.children && node.children.length > 0) {
             iconClass = options.expanded ? 'pi pi-folder-open text-yellow-500' : 'pi pi-folder text-yellow-500';
         }
 
         return (
             <div
-                className="flex align-items-center w-full cursor-pointer hover:text-white transition-colors transition-duration-150"
-                draggable={!node.children} // Files are draggable
-                onDragStart={(e) => !node.children && handleDragStart(e, node)}
+                className="flex align-items-center w-full cursor-pointer hover:text-white transition-colors transition-duration-150 p-1"
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, node)}
             >
                 <i className={`${iconClass} mr-2`}></i>
                 <span className="text-gray-300 text-sm select-none">{node.label}</span>
@@ -70,6 +70,7 @@ export default function LibraryPanel({ nodes, onRefresh, loading = false }: Libr
                         className="w-full border-none bg-transparent p-0 m-0 text-sm"
                         contentClassName="p-0"
                         nodeTemplate={nodeTemplate}
+                        dragdropScope="library-item"
                     />
                 )}
             </div>
